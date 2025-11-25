@@ -9,6 +9,7 @@ class BaseAST{
     virtual ~BaseAST() = default;
 
     virtual void Dump() const = 0;
+    virtual void GenerateIR() const = 0;
 };
 
 class CompUnit : public BaseAST{
@@ -19,6 +20,10 @@ class CompUnit : public BaseAST{
         cout << "CompUnitAST { ";
         func_def->Dump();
         cout << " }";
+    }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
+        func_def->GenerateIR();
     }
 };
 
@@ -33,10 +38,16 @@ class FuncDef : public BaseAST{
         func_type->Dump();
 
         cout << " , ";
-        cout << "ident: " << *ident << " , ";
+        cout << *ident << " , ";
         
         block->Dump();
         cout << " }";
+    }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
+        cout << "fun @" << *ident << "(): "; 
+        func_type->GenerateIR();
+        block->GenerateIR();
     }
 };
 
@@ -44,7 +55,13 @@ class FuncType : public BaseAST{
     public:
     std::unique_ptr<string> functype;
     void Dump() const override{
-        cout << "functype: " << *functype;
+        cout << "FuncType: { " << *functype << " }";
+    }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
+        if(functype->compare("int") == 0){
+            cout << "i32 ";
+        }
     }
 };
 
@@ -53,9 +70,16 @@ class Block : public BaseAST{
     std::unique_ptr<BaseAST> stmt;
 
     void Dump() const override{
-        cout << "block: { ";
+        cout << "Block: { ";
         stmt->Dump();
         cout << " }";
+    }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
+        cout << "{\n";
+        cout << "\%entry:\n";
+        stmt->GenerateIR();
+        cout << "\n}\n";
     }
 };
 
@@ -68,6 +92,11 @@ class Stmt : public BaseAST{
         number->Dump();
         cout << ";";
     }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
+        cout << "  ret ";
+        number->GenerateIR();
+    }
 };
 
 class Number : public BaseAST{
@@ -75,6 +104,10 @@ class Number : public BaseAST{
     int int_const;
 
     void Dump() const override{
+        cout << to_string(int_const);
+    }
+    void GenerateIR() const override{
+        // Implementation for IR generation would go here
         cout << to_string(int_const);
     }
 };

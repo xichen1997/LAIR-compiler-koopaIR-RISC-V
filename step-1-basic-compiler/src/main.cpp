@@ -23,6 +23,9 @@ int main(int argc, const char *argv[]) {
   auto input = argv[2];
   auto output = argv[4];
 
+  // 目前我们只支持 "模式" 这一种模式
+  assert(string(mode) == "-koopa");
+
   // 打开输入文件, 并且指定 lexer 在解析的时候读取这个文件
   yyin = fopen(input, "r");
   assert(yyin);
@@ -32,7 +35,11 @@ int main(int argc, const char *argv[]) {
   auto ret = yyparse(ast);
   assert(!ret);
 
-  // 输出解析得到的 AST, 其实就是个字符串
-  ast->Dump();
+  // 关闭输入文件
+  fclose(yyin);
+
+  // 把解析出来的AST输出到文件中 
+  freopen(output, "w", stdout);
+  ast->GenerateIR();
   return 0;
 }

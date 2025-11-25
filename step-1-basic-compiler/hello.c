@@ -3,5 +3,5 @@ a multiple lines
 comment
 */
 int main(){
-    return 123; // comments here
+    return 0; // comments here
 }
