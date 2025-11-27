@@ -1,12 +1,13 @@
 #pragma once
 #include <iostream>
+#include "koopa.h"
 
 using namespace std;
 
 
 class BaseAST{
     public:
-    virtual ~BaseAST() = default; // Virtual destructor for base class, it's necessary.
+    virtual ~BaseAST() = default;
 
     virtual void Dump() const = 0;
     virtual void GenerateIR() const = 0;
