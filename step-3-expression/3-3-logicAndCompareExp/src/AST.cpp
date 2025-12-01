@@ -136,6 +136,7 @@ void UnaryExp::GenerateIR(){
         cout << "  " << *varName << " = ";
         if(unary_op->compare("+") == 0){
             // do nothing because +x is just x
+            cout << "add 0, " << *(unary_exp->varName) << "\n";
         }else if(unary_op->compare("-") == 0){
             cout << "sub 0, " << *(unary_exp->varName) << "\n";
         } else if(unary_op->compare("!") == 0){
@@ -222,7 +223,7 @@ void MulExp::GenerateIR() {
         } else if(mul_op->compare("/") == 0){
             cout << "  " << *varName << " = div " << leftVar << ", " << rightVar << "\n";
         } else if(mul_op->compare("%") == 0){
-            cout << "  " << *varName << " = rem " << leftVar << ", " << rightVar << "\n";
+            cout << "  " << *varName << " = mod " << leftVar << ", " << rightVar << "\n";
         } else{
             assert(false);
         }
@@ -334,10 +335,14 @@ void LAndExp::GenerateIR(){
 
         string leftVar = *(land_exp->varName);
         string rightVar = *(eq_exp->varName);
-        varName = make_unique<string>("\%" + to_string(temp_count++));
         
         if(land_op->compare("&&") == 0){
-            cout << "  " << *varName << " = and " << leftVar << ", " << rightVar << "\n";
+            unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
+            unique_ptr<string> temp2 = make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *temp1 << " = ne " << leftVar << ", " << "0" << "\n";
+            cout << "  " << *temp2 << " = ne " << rightVar << ", " << "0" << "\n";
+            varName = make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *varName << " = and " << *temp1 << ", " << *temp2 << "\n";
         }else{
             assert(false);
         }
@@ -360,10 +365,14 @@ void LOrExp::GenerateIR(){
 
         string leftVar = *(lor_exp->varName);
         string rightVar = *(land_exp->varName);
-        varName = make_unique<string>("\%" + to_string(temp_count++));
         
         if(lor_op->compare("||") == 0){
-            cout << "  " << *varName << " = or " << leftVar << ", " << rightVar << "\n";
+            unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
+            unique_ptr<string> temp2 = make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *temp1 << " = ne " << leftVar << ", " << "0" << "\n";
+            cout << "  " << *temp2 << " = ne " << rightVar << ", " << "0" << "\n";
+            varName = make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *varName << " = or " << *temp1 << ", " << *temp2 << "\n";
         }else{
             assert(false);
         }

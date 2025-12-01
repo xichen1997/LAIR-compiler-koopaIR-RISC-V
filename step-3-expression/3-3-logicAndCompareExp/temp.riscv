@@ -3,9 +3,5 @@
 main:
   li t0, 1
   sub t1, x0, t0
-  li t2, 2
-  li t3, 3
-  mul t4, t2, t3
-  add t5, t1, t4
-  mv a0, t5
+  mv a0, t1
   ret

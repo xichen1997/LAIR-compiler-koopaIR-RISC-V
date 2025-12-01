@@ -98,10 +98,11 @@ inline void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &val
   Visit(binary.lhs);
   Visit(binary.rhs);
 
-  temp_register_map[value] = "t" + to_string(register_count++);
-
   string lhs = temp_register_map[binary.lhs];
   string rhs = temp_register_map[binary.rhs];
+
+  temp_register_map[value] = rhs; // reuse lhs register to save temp result
+
 
   switch (binary.op){
     case KOOPA_RBO_SUB:
@@ -120,19 +121,21 @@ inline void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &val
     case KOOPA_RBO_DIV:
       cout << "  div " << temp_register_map[value] << ", " << lhs << ", " << rhs << endl;
     break;
+    case KOOPA_RBO_MOD:
+      cout << "  rem " << temp_register_map[value] << ", " << lhs << ", " << rhs << endl;
+    break;
     case KOOPA_RBO_NOT_EQ:
       cout << "  xor " << temp_register_map[value] << ", " <<  lhs << ", " << rhs << endl;
       cout << "  snez " << temp_register_map[value] << ", " << temp_register_map[value] << endl;
     break;
     case KOOPA_RBO_LT:
       cout << "  slt " << temp_register_map[value] << ", " << lhs << ", " << rhs << endl;
-      cout << "  seqz " << temp_register_map[value] << ", " << temp_register_map[value] << endl;
     break;
     case KOOPA_RBO_GT:
-      cout << "  sgt " << temp_register_map[value] << ", " << lhs << ", " << rhs << endl;
+      cout << "  slt " << temp_register_map[value] << ", " << rhs << ", " << lhs << endl;
     break;
     case KOOPA_RBO_LE:
-      cout << "  sgt " << temp_register_map[value] << ", " << lhs << ", " << rhs << endl;
+      cout << "  slt " << temp_register_map[value] << ", " << rhs << ", " << lhs << endl;
       cout << "  seqz " << temp_register_map[value] << ", " << temp_register_map[value] << endl;
     break;
     case KOOPA_RBO_GE:
