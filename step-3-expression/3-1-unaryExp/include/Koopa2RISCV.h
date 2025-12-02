@@ -98,10 +98,16 @@ inline void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &val
   Visit(binary.lhs);
   Visit(binary.rhs);
 
-  temp_register_map[value] = "t" + to_string(register_count++);
-
   string lhs = temp_register_map[binary.lhs];
   string rhs = temp_register_map[binary.rhs];
+
+  if(lhs!="x0" && isalpha(lhs[0])){
+    temp_register_map[value] = lhs; // reuse lhs register to save temp result
+  }else if(rhs!="x0" && isalpha(rhs[0])){
+    temp_register_map[value] = rhs;
+  }else{
+    temp_register_map[value] = "t" + to_string(register_count++);
+  }
 
   switch (binary.op){
     case KOOPA_RBO_SUB:
