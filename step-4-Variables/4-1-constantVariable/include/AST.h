@@ -121,62 +121,6 @@ class UnaryExp : public BaseAST{
     void GenerateIR() override;
 };
 
-class UnaryOp : public BaseAST{
-    public:
-    std::unique_ptr<string> unary_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-}; 
-
-class MulOp : public BaseAST{
-    public:
-    std::unique_ptr<string> mul_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
-class AddOp : public BaseAST{
-    public:
-    std::unique_ptr<string> add_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
-class RelOp : public BaseAST{
-    public:
-    std::unique_ptr<string> rel_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
-class EqOp : public BaseAST{
-    public:
-    std::unique_ptr<string> eq_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
-class LAndOp : public BaseAST{
-    public:
-    std::unique_ptr<string> land_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
-class LOrOp : public BaseAST{
-    public:
-    std::unique_ptr<string> lor_op;
-
-    void Dump() override;
-    void GenerateIR() override;
-};
-
 class Stmt : public BaseAST{
     public:
     std::unique_ptr<Exp> exp;
