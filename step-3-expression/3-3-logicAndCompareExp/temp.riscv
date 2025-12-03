@@ -2,6 +2,6 @@
   .globl main
 main:
   li t0, 1
-  sub t1, x0, t0
-  mv a0, t1
+  add t0, x0, t0
+  mv a0, t0
   ret

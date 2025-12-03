@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <memory>
+#include <vector>
 #include <string>
 #include "koopa.h"
 
@@ -12,19 +13,25 @@ class BaseAST;
 class CompUnit;
 class FuncDef;
 class FuncType;
+class Decl;
+class ConstDecl;
+class ConstDefList;
+class ConstDef;
+class ConstInitVal;
+class BlockItem;
 class Block;
 class Stmt;
 class Exp;
-// Expression Classes
+class ConstExp;
+class LOrExp;
+class LAndExp;
+class EqExp;
+class RelExp;
+class AddExp;
+class MulExp;
 class UnaryExp;
 class PrimaryExp;
 class Number;
-class MulExp;
-class AddExp;
-class RelExp;
-class EqExp;
-class LAndExp;
-class LOrExp;
 
 
 class BaseAST{
@@ -63,10 +70,29 @@ class FuncType : public BaseAST{
     void GenerateIR() override;
 };
 
+class BlockItemList : public BaseAST{
+    public:
+    std::vector<std::unique_ptr<BlockItem>> block_items;
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class BlockItem : public BaseAST{
+    public:
+    enum Kind{
+        _Decl,
+        _Stmt
+    }kind;
+    std::unique_ptr<Decl> decl;
+    std::unique_ptr<Stmt> stmt; 
+
+    void Dump() override;
+    void GenerateIR() override;
+};
+
 class Block : public BaseAST{
     public:
-    std::unique_ptr<BaseAST> stmt;
-
+    std::unique_ptr<BlockItemList> block_item_list;
     void Dump() override;
     void GenerateIR() override;
 };
@@ -93,11 +119,13 @@ class PrimaryExp : public BaseAST{
     public:
     enum Kind{
         _Exp,
+        _Lval,
         _Number
     }kind;
 
     std::unique_ptr<string> varName;
     std::unique_ptr<Exp> exp;
+    std::unique_ptr<string> ident;
     std::unique_ptr<Number> number;
 
     void Dump() override;
@@ -123,7 +151,12 @@ class UnaryExp : public BaseAST{
 
 class Stmt : public BaseAST{
     public:
+    enum Kind{
+        _Lval_Assign_Exp,
+        _Return_Exp
+    }kind;
     std::unique_ptr<Exp> exp;
+    std::unique_ptr<string> lval;
 
     void Dump() override;
     void GenerateIR() override;
@@ -198,6 +231,53 @@ class LOrExp : public BaseAST{
     std::unique_ptr<string> lor_op;
     std::unique_ptr<LAndExp> land_exp;
 
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class ConstExp : public BaseAST{
+    public:
+    std::unique_ptr<Exp> exp;
+    std::unique_ptr<string> varName;
+
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class Decl : public BaseAST{
+    public:
+    std::unique_ptr<ConstDecl> const_decl;
+
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class ConstDecl : public BaseAST{
+    public:
+    std::unique_ptr<string> btype;
+    std::unique_ptr<ConstDefList> const_def_list;
+    void Dump() override;  
+    void GenerateIR() override;
+};
+
+class ConstDefList : public BaseAST{
+    public:
+    std::vector<std::unique_ptr<ConstDef>> const_defs;
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class ConstDef : public BaseAST{
+    public:
+    std::unique_ptr<string> ident;
+    std::unique_ptr<ConstInitVal> const_init_val;
+    void Dump() override;
+    void GenerateIR() override;
+};
+
+class ConstInitVal : public BaseAST{
+    public:
+    std::unique_ptr<ConstExp> const_exp;
     void Dump() override;
     void GenerateIR() override;
 };

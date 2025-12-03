@@ -7,6 +7,7 @@
 %code requires {
   #include <memory>
   #include <string>
+  #include <vector>
   #include "../include/AST.h"
 }
 
@@ -46,16 +47,18 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN
-%token <str_val> IDENT PLUS MINUS NOT MUL DIV MOD LE GE LESS GREATER SAME NOTSAME LAND LOR
-%token <int_val> INT_CONST
+%token INT RETURN 
+%token <str_val> IDENT PLUS MINUS NOT MUL DIV MOD LE GE LESS GREATER SAME NOTSAME LAND LOR 
+%token <int_val> INT_CONST 
 
 // 非终结符的类型定义
-%type <ast_val> Block Stmt Number 
+%type <ast_val> Block BlockItemList BlockItem Stmt Number
 // 定义运算相关
-%type <ast_val> FuncDef FuncType Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp
+%type <ast_val> Decl FuncDef FuncType Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
+// 定义变量常量
+%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
-%type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp
+%type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp LVAL BType
 
 %%
 // 把所有的东西都放到类里面，用unique pointer 管理各个ast。
@@ -92,20 +95,117 @@ FuncType
   }
   ;
 
+BType
+  : INT{
+    $$ = new string("INT");
+  }
+  ;
+
+Decl
+  : ConstDecl {
+    auto cd = dynamic_cast<ConstDecl*>($1);
+    auto ast = new Decl();
+    ast->const_decl.reset(cd);
+    $$ = ast;
+    cerr << "[AST] Built Decl at line " << @1.first_line << endl;
+  }
+  ;
+
+ConstDecl
+  : "const" BType ConstDefList ';'{
+    auto bt = $2;
+    auto cdl = dynamic_cast<ConstDefList*>($3);
+    auto ast = new ConstDecl();
+    ast->btype.reset(bt);
+    ast->const_def_list.reset(cdl);
+    $$ = ast;
+    cerr << "[AST] Built ConstDecl at line " << @1.first_line << endl;
+  }
+  ;
+
+ConstDefList
+  : ConstDef {
+    auto cd = dynamic_cast<ConstDef*>($1);
+    auto ast = new ConstDefList();
+    ast->const_defs.emplace_back(cd);
+    $$ = ast;
+    cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
+  }
+  | ConstDefList ',' ConstDef{
+    auto cd = dynamic_cast<ConstDef*>($3);
+    auto cdl = dynamic_cast<ConstDefList*>($1);
+    cdl->const_defs.emplace_back(cd);
+    $$ = cdl;
+    cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
+  }
+  ;
+
+ConstDef
+  : IDENT '=' ConstInitVal {
+    auto civ = dynamic_cast<ConstInitVal*>($3);
+    auto ast = new ConstDef();
+    ast->const_init_val.reset(civ);
+    ast->ident.reset($1);
+    $$ = ast;
+    cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
+  }
+  ;
+
 Block
-  : '{' Stmt '}' {
+  : '{' BlockItemList '}' {
+    auto bil = dynamic_cast<BlockItemList*>($2);
     auto ast = new Block();
-    ast->stmt = unique_ptr<BaseAST>($2);
+    ast->block_item_list.reset(bil);
     ast->lineno = @1.first_line;  
     $$ = ast;
     cerr << "[AST] Built Block at line " << @1.first_line << endl;
   }
   ;
 
+BlockItemList
+  : /* empty */
+  | BlockItemList BlockItem{
+    auto bi = dynamic_cast<BlockItem*>($2);
+    auto bil = dynamic_cast<BlockItemList*>($1);
+    bil->block_items.emplace_back(bi);
+    $$ = bil;
+  }
+  ;
+
+BlockItem
+  : Decl {
+    auto decl = dynamic_cast<Decl*>($1);
+    auto ast = new BlockItem();
+    ast->decl.reset(decl);
+    ast->lineno = @1.first_line;
+    $$ = ast;
+    cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
+  }
+  | Stmt {    
+    auto stmt = dynamic_cast<Stmt*>($1);
+    auto ast = new BlockItem();
+    ast->stmt.reset(stmt);
+    ast->lineno = @1.first_line;
+    $$ = ast;
+    cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
+  }
+  ;
+
 Stmt
-  : RETURN Exp ';' {
+  : LVAL '=' Exp ';'{
+    auto exp = dynamic_cast<Exp*>($3);
+    auto ast = new Stmt();
+    ast->kind = Stmt::_Lval_Assign_Exp;
+    ast->lval.reset($1);
+    ast->exp.reset(exp);
+    ast->lineno = @1.first_line;
+    $$ = ast;
+    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+  }
+  | RETURN Exp ';' {
     auto exp = dynamic_cast<Exp*>($2);
     auto ast = new Stmt();
+    ast->kind = Stmt::_Return_Exp;
     ast->exp = unique_ptr<Exp>(exp);
     ast->lineno = @1.first_line; 
     $$ = ast;
@@ -142,6 +242,13 @@ PrimaryExp
     ast->exp = unique_ptr<Exp>(e); 
     ast->lineno = @1.first_line; 
     $$ = ast; 
+    cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
+  }
+  | LVAL {
+    auto ast = new PrimaryExp();
+    ast->kind = PrimaryExp::_Lval;
+    ast->ident.reset($1);
+    $$ = ast;
     cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
   }
   | Number { 
@@ -348,7 +455,24 @@ LOrExp
     cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
   }
   ;
+ConstInitVal
+  : ConstExp {
+    auto ce = dynamic_cast<ConstExp*>($1);
+    auto ast = new ConstInitVal();
+    ast->const_exp.reset(ce);
+    $$ = ast;
+    cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
+  }
 
+ConstExp
+  : Exp {
+    auto e = dynamic_cast<Exp*>($1);
+    auto ast = new ConstExp();
+    ast->exp.reset(e);
+    $$ = ast;
+    cerr << "[AST] Built ConstExp at line " << @1.first_line << endl;
+  }
+  ;
 
 UnaryOp
   : PLUS   { $$ = $1; }
@@ -384,6 +508,9 @@ LAndOp
 
 LOrOp
   : LOR    { $$ = $1; }
+
+LVAL
+  : IDENT  { $$ = $1; }
 %%
 
 // 定义错误处理函数, 其中第二个参数是错误信息
