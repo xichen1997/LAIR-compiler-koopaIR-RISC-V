@@ -5,25 +5,9 @@ using namespace std;
 
 int temp_count = 0;
 
-void CompUnit::Dump() {
-    cout << "CompUnitAST { ";
-    func_def->Dump();
-    cout << " }";
-}
 void CompUnit::GenerateIR() {
     // Implementation for IR generation would go here
     func_def->GenerateIR();
-}
-
-void FuncDef::Dump() {
-    cout << "FuncDef { ";
-    func_type->Dump();
-
-    cout << " , ";
-    cout << *ident << " , ";
-    
-    block->Dump();
-    cout << " }";
 }
 
 void FuncDef::GenerateIR() {
@@ -33,34 +17,14 @@ void FuncDef::GenerateIR() {
     block->GenerateIR();
 }
 
-void Decl::Dump() {
-    cout << "Decl: { ";
-    const_decl->Dump();
-    cout << " }";
-}
-
 void Decl::GenerateIR(){
     // Implementation for IR generation would go here
     const_decl->GenerateIR();
 }
 
-void ConstDecl::Dump() {
-    cout << "ConstDecl: { ";
-    const_def_list->Dump();
-    cout << " }";
-}
-
 void ConstDecl::GenerateIR(){
     // Implementation for IR generation would go here
     const_def_list->GenerateIR();
-}
-
-void ConstDefList::Dump() {
-    cout << "ConstDefList: { ";
-    for(auto& const_def : const_defs){
-        const_def->Dump();
-    }
-    cout << " }";
 }
 
 void ConstDefList::GenerateIR(){
@@ -70,21 +34,9 @@ void ConstDefList::GenerateIR(){
     }
 } 
 
-void ConstDef::Dump() {
-    cout << "ConstDef: { ";
-    const_init_val->Dump();
-    cout << " }";
-}
-
 void ConstDef::GenerateIR(){
     // Implementation for IR generation would go here
     const_init_val->GenerateIR();
-}
-
-void ConstInitVal::Dump() {
-    cout << "ConstInitVal: { ";
-    const_exp->Dump();
-    cout << " }";
 }
 
 void ConstInitVal::GenerateIR(){
@@ -92,21 +44,11 @@ void ConstInitVal::GenerateIR(){
     const_exp->GenerateIR();
 }
 
-void FuncType::Dump() {
-    cout << "FuncType: { " << *functype << " }";
-}
-
 void FuncType::GenerateIR() {
     // Implementation for IR generation would go here
     if(functype->compare("int") == 0){
         cout << "i32 ";
     }
-}
-
-void Block::Dump() {
-    cout << "Block: { ";
-    block_item_list->Dump();
-    cout << " }";
 }
 
 void Block::GenerateIR() {
@@ -117,23 +59,9 @@ void Block::GenerateIR() {
     cout << "\n}\n";
 }
 
-void BlockItemList::Dump() {
-    for(auto& block_item : block_items){
-        block_item->Dump();
-    }
-}
-
 void BlockItemList::GenerateIR() {
     for(auto& block_item : block_items){
         block_item->GenerateIR();
-    }
-}
-
-void BlockItem::Dump() {
-    if(kind == _Decl){
-        decl->Dump();
-    } else if(kind == _Stmt){
-        stmt->Dump();
     }
 }
 
@@ -142,19 +70,6 @@ void BlockItem::GenerateIR() {
         decl->GenerateIR();
     } else if(kind == _Stmt){
         stmt->GenerateIR();
-    }
-}
-
-void Stmt::Dump() {
-    if(kind == _Lval_Assign_Exp){
-        cout << "Stmt: { Lval = ";
-        cout << *lval << " , Exp = ";
-        exp->Dump();
-        cout << " }";
-    } else if(kind == _Return_Exp){
-        cout << "Stmt: { Return Exp = ";
-        exp->Dump();
-        cout << " }";
     }
 }
 
@@ -168,35 +83,15 @@ void Stmt::GenerateIR() {
     }
 }
 
-void Number::Dump() {
-    cout << to_string(int_const);
-}
-
 void Number::GenerateIR() {
     // Implementation for IR generation would go here
     // cout << to_string(int_const);
-}
-
-void Exp::Dump() {
-    cout << "Exp: { ";
-    lor_exp->Dump();
-    cout << " }";
 }
 
 void Exp::GenerateIR() {
     // Implementation for IR generation would go here
     lor_exp->GenerateIR();
     varName = std::make_unique<string>(*(lor_exp->varName));
-}
-
-void PrimaryExp::Dump() {
-    cout << "PrimaryExp: { ";
-    if(kind == _Exp){
-        exp->Dump();
-    } else if(kind == _Number){
-        number->Dump();
-    }
-    cout << " }";
 }
 
 void PrimaryExp::GenerateIR(){
@@ -212,17 +107,6 @@ void PrimaryExp::GenerateIR(){
         // for Lval, just use the ident as varName
         varName = std::make_unique<string>(*ident);
     }
-}
-
-void UnaryExp::Dump() {
-    cout << "UnaryExp: { ";
-    if(kind == _PrimaryExp){
-        primary_exp->Dump();
-    } else if(kind == _UnaryOp_UnaryExp){
-        cout << *unary_op << " ";
-        unary_exp->Dump();
-    }
-    cout << " }";
 }
 
 void UnaryExp::GenerateIR(){
@@ -245,11 +129,6 @@ void UnaryExp::GenerateIR(){
     }
 }
 
-void MulExp::Dump() {
-    cout << "MulExp: { ";
-    unary_exp->Dump();
-    cout << " }";
-}
 
 void MulExp::GenerateIR() {
     // Implementation for IR generation would go here
@@ -277,11 +156,6 @@ void MulExp::GenerateIR() {
     }
 }
 
-void AddExp::Dump() {
-    cout << "AddExp: { ";
-    mul_exp->Dump();
-    cout << " }";
-}
 
 void AddExp::GenerateIR(){
     if(kind == _MulExp){
@@ -303,12 +177,6 @@ void AddExp::GenerateIR(){
             assert(false);
         }
     }
-}
-
-void RelExp::Dump() {
-    cout << "RelExp: { ";
-    add_exp->Dump();
-    cout << " }";
 }
 
 void RelExp::GenerateIR(){
@@ -337,12 +205,6 @@ void RelExp::GenerateIR(){
     }
 }
 
-void EqExp::Dump() {
-    cout << "EqExp: { ";
-    rel_exp->Dump();
-    cout << " }";
-}
-
 void EqExp::GenerateIR(){
     if(kind == _RelExp){
         rel_exp->GenerateIR();
@@ -363,13 +225,6 @@ void EqExp::GenerateIR(){
             assert(false);
         }
     }
-}
-
-
-void LAndExp::Dump() {
-    cout << "LAndExp: { ";
-    eq_exp->Dump();
-    cout << " }";
 }
 
 void LAndExp::GenerateIR(){
@@ -396,11 +251,6 @@ void LAndExp::GenerateIR(){
     }
 }
 
-void LOrExp::Dump() {
-    cout << "LOrExp: { ";
-    land_exp->Dump();
-    cout << " }";
-}
 
 void LOrExp::GenerateIR(){
     if(kind == _LAndExp){
@@ -426,13 +276,10 @@ void LOrExp::GenerateIR(){
     }
 }
 
-void ConstExp::Dump() {
-    cout << "ConstExp: { ";
-    exp->Dump();
-    cout << " }";
-}
+
 void ConstExp::GenerateIR() {
     // Implementation for IR generation would go here
     exp->GenerateIR();
     varName = std::make_unique<string>(*(exp->varName));
 }
+
