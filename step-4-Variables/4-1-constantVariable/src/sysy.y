@@ -56,7 +56,7 @@ using namespace std;
 // 定义运算相关
 %type <ast_val> Decl FuncDef FuncType Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
 // 定义变量常量
-%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal
+%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal VarDecl VarDefList VarDef InitVal
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
 %type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp LVAL BType
 
@@ -105,8 +105,17 @@ Decl
   : ConstDecl {
     auto cd = dynamic_cast<ConstDecl*>($1);
     auto ast = new Decl();
+    ast->kind = Decl::_ConstDecl;
     ast->const_decl.reset(cd);
     $$ = ast;
+    cerr << "[AST] Built Decl at line " << @1.first_line << endl;
+  }
+  | VarDecl {
+    auto vd = dynamic_cast<VarDecl*>($1);
+    auto ast = new Decl();
+    ast->kind = Decl::_VarDecl;
+    ast->var_decl.reset(vd);
+    $$ = ast; 
     cerr << "[AST] Built Decl at line " << @1.first_line << endl;
   }
   ;
@@ -148,6 +157,51 @@ ConstDef
     ast->ident.reset($1);
     $$ = ast;
     cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
+  }
+  ;
+
+VarDecl
+  : BType VarDefList ';'{
+    auto bt = $1;
+    auto vdl = dynamic_cast<VarDefList*>($2);
+    auto ast = new VarDecl();
+    ast->btype.reset(bt);
+    ast->var_def_list.reset(vdl);
+    $$ = ast;
+    cerr << "[AST] Built VarDecl at line " << @1.first_line << endl;
+  }
+  ;
+
+VarDefList
+  : VarDef {
+    auto ast = new VarDefList();
+    auto vd = dynamic_cast<VarDef*>($1);
+    ast->var_defs.emplace_back(vd);
+    $$ = ast;
+    cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
+  }
+  | VarDefList ',' VarDef {
+    auto vdl = dynamic_cast<VarDefList*>($1);
+    auto vd = dynamic_cast<VarDef*>($3);
+    vdl->var_defs.emplace_back(vd);
+    $$ = vdl;
+    cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
+  }
+
+VarDef
+  : IDENT {
+    auto ast = new VarDef();
+    ast->ident.reset($1);
+    $$ = ast;
+    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
+  }
+  | IDENT '=' InitVal { 
+    auto ast = new VarDef();
+    auto iv = dynamic_cast<InitVal*>($3);
+    ast->ident.reset($1);
+    ast->init_val.reset(iv);
+    $$ = ast;
+    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
   }
   ;
 
@@ -471,6 +525,17 @@ ConstInitVal
     $$ = ast;
     cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
   }
+
+
+InitVal
+  : Exp{
+    auto e = dynamic_cast<Exp*>($1);
+    auto ast = new InitVal();
+    ast->exp.reset(e);
+    $$ = ast;
+    cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
+  }
+
 
 ConstExp
   : Exp {

@@ -1,6 +1,8 @@
 #include "../include/AST.h"
 
 unordered_map<string, int> const_variable_table;
+unordered_set<string> initialized_variables;
+unordered_set<string> delacred_variables;
 
 using namespace std;
 
@@ -20,7 +22,11 @@ void FuncDef::GenerateIR() {
 
 void Decl::GenerateIR(){
     // Implementation for IR generation would go here
-    const_decl->EvaluateConstValues();
+    if(kind == _VarDecl){
+        var_decl->GenerateIR();
+    } else if(kind == _ConstDecl){
+        const_decl->EvaluateConstValues();
+    }
 }
 
 void ConstDecl::GenerateIR(){
@@ -65,6 +71,51 @@ void ConstInitVal::GenerateIR(){
     // do nothing
 }
 
+void VarDecl::GenerateIR(){
+    var_def_list->GenerateIR();
+}
+
+void VarDefList::GenerateIR(){
+    for(auto& var_def : var_defs){
+        var_def->GenerateIR();
+    }
+}
+
+void VarDef::GenerateIR(){
+    // Implementation for IR generation would go here
+    if(delacred_variables.count(*ident) > 0){
+        cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
+        assert(false);
+    }
+    delacred_variables.insert(*ident);
+    cout << "  @" << *ident << " = alloc i32\n";
+    if(init_val){
+        init_val->GenerateIR();
+        // constant folding for init_val
+        if(const_variable_table.count(*(init_val->varName)) > 0){
+            cout << "  store " << const_variable_table[*(init_val->varName)] << ", @" << *ident << "\n";
+            return;
+        }  
+        // check if the init_val variable is initialized and not temporary variables
+        string tmp = *(init_val->varName);
+
+        if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(init_val->varName)) == 0){
+            cerr << "Error: Use of uninitialized variable " << *(init_val->varName) << " at line " << lineno << endl;
+            assert(false);
+        }
+        
+        cout << "  store " << *(init_val->varName) << ", @" << *ident << "\n";
+        initialized_variables.insert(*ident);
+    }else{
+        cerr << "uninitialized!" << endl;
+    }
+}
+
+void InitVal::GenerateIR(){
+    exp->GenerateIR();
+    varName = std::make_unique<string>(*(exp->varName));
+}
+
 void FuncType::GenerateIR() {
     // Implementation for IR generation would go here
     if(functype->compare("int") == 0){
@@ -97,14 +148,32 @@ void BlockItem::GenerateIR() {
 void Stmt::GenerateIR() {
     if(kind == _Lval_Assign_Exp){
         exp->GenerateIR();
+        // check if lval is not declared, if not then we add it to initialized_variables
+        if(initialized_variables.count(*lval) == 0){
+            initialized_variables.insert(*lval);
+        }
+        if(const_variable_table.count(*(exp->varName)) > 0){
+            cout << "  store " << const_variable_table[*(exp->varName)] << ", @" << *lval << "\n";
+            return;
+        }  
         cout << "  store " << *(exp->varName) << ", @" << *lval << "\n";
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
+        string tmp = *(exp->varName);
         if(const_variable_table.count(*(exp->varName)) > 0){
             cout << "  ret " << const_variable_table[*(exp->varName)] << "\n";
-        } else{
-            cout << "  ret " << *(exp->varName) << "\n";
+            return;
+        } 
+        
+        if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(exp->varName)) == 0){
+            cerr << "Use uninitialized variable as return value" << endl;
+            assert(false);
         }
+        if(tmp[0]!='%' && !isdigit(tmp[0])){
+            cout << "  ret @" << *(exp->varName) << "\n";
+            return;
+        }
+        cout << "  ret " << *(exp->varName) << "\n";
     }
 }
 

@@ -6,18 +6,25 @@
 #include <string>
 #include <variant>
 #include <unordered_map>
+#include <unordered_set>
 #include "koopa.h"
 
 using namespace std;
 
 extern int temp_count;
 extern unordered_map<string, int> const_variable_table;
+extern unordered_set<string> initialized_variables;
+extern unordered_set<string> delacred_variables;
 
 class BaseAST;
 class CompUnit;
 class FuncDef;
 class FuncType;
 class Decl;
+class VarDecl;
+class VarDefList;
+class VarDef;
+class InitVal;
 class ConstDecl;
 class ConstDefList;
 class ConstDef;
@@ -254,6 +261,11 @@ class ConstExp : public BaseAST{
 
 class Decl : public BaseAST{
     public:
+    enum Kind{
+        _ConstDecl,
+        _VarDecl
+    }kind;
+    std::unique_ptr<VarDecl> var_decl;
     std::unique_ptr<ConstDecl> const_decl;
 
     void GenerateIR() override;
@@ -294,4 +306,35 @@ class ConstInitVal : public BaseAST{
 
     void GenerateIR() override;
     void EvaluateConstValues();
+};
+
+class VarDecl : public BaseAST{
+    public:
+    std::unique_ptr<string> btype;
+    std::unique_ptr<VarDefList> var_def_list;
+
+    void GenerateIR() override;
+};
+
+class VarDefList : public BaseAST{
+    public:
+    std::vector<std::unique_ptr<VarDef>> var_defs;
+
+    void GenerateIR() override;
+};
+
+class VarDef : public BaseAST{
+    public:
+    std::unique_ptr<string> ident;
+    std::unique_ptr<InitVal> init_val;
+
+    void GenerateIR() override;
+};
+
+class InitVal : public BaseAST{
+    public:
+    std::unique_ptr<Exp> exp;
+    std::unique_ptr<string> varName;
+
+    void GenerateIR() override;
 };
