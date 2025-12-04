@@ -1,5 +1,6 @@
 #include "../include/AST.h"
-#include <cassert>
+
+unordered_map<string, int> const_variable_table;
 
 using namespace std;
 
@@ -19,29 +20,49 @@ void FuncDef::GenerateIR() {
 
 void Decl::GenerateIR(){
     // Implementation for IR generation would go here
-    const_decl->GenerateIR();
+    const_decl->EvaluateConstValues();
 }
 
 void ConstDecl::GenerateIR(){
-    // Implementation for IR generation would go here
-    const_def_list->GenerateIR();
+    // do nothing
+}
+
+void ConstDecl::EvaluateConstValues(){
+    const_def_list->EvaluateConstValues();
+}
+
+void ConstDefList::EvaluateConstValues(){
+    for(auto& const_def : const_defs){
+        const_def->EvaluateConstValues();
+    }
 }
 
 void ConstDefList::GenerateIR(){
-    // Implementation for IR generation would go here
-    for(auto& const_def : const_defs){
-        const_def->GenerateIR();
-    }
+    // do nothing
 } 
 
+void ConstDef::EvaluateConstValues(){
+    const_init_val->EvaluateConstValues();
+    const_value = const_init_val->const_value;
+    // update the const_variable_table
+    if(const_variable_table.count(*ident) > 0){
+        cerr << "Error: Redefinition of constant variable " << *ident << " at line " << lineno << endl;
+        assert(false);
+    }
+    const_variable_table[*ident] = std::get<int>(const_value);
+}
+
 void ConstDef::GenerateIR(){
-    // Implementation for IR generation would go here
-    const_init_val->GenerateIR();
+    // do nothing
+}
+
+void ConstInitVal::EvaluateConstValues(){
+    const_exp->EvaluateConstValues();
+    const_value = const_exp->const_value;
 }
 
 void ConstInitVal::GenerateIR(){
-    // Implementation for IR generation would go here
-    const_exp->GenerateIR();
+    // do nothing
 }
 
 void FuncType::GenerateIR() {
@@ -79,7 +100,11 @@ void Stmt::GenerateIR() {
         cout << "  store " << *(exp->varName) << ", @" << *lval << "\n";
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
-        cout << "  ret " << *(exp->varName) << "\n";
+        if(const_variable_table.count(*(exp->varName)) > 0){
+            cout << "  ret " << const_variable_table[*(exp->varName)] << "\n";
+        } else{
+            cout << "  ret " << *(exp->varName) << "\n";
+        }
     }
 }
 
@@ -92,6 +117,11 @@ void Exp::GenerateIR() {
     // Implementation for IR generation would go here
     lor_exp->GenerateIR();
     varName = std::make_unique<string>(*(lor_exp->varName));
+}
+
+void Exp::EvaluateConstValues(){
+    lor_exp->EvaluateConstValues();
+    const_value = lor_exp->const_value;
 }
 
 void PrimaryExp::GenerateIR(){
@@ -109,6 +139,26 @@ void PrimaryExp::GenerateIR(){
     }
 }
 
+void PrimaryExp::EvaluateConstValues(){
+    if(kind == _Exp){
+        exp->EvaluateConstValues();
+        const_value = exp->const_value;
+    } else if(kind == _Number){
+        const_value = number->int_const;
+    } else if(kind == _Lval){
+        // lookup the const_variable_table to get the value
+        if(const_variable_table.count(*ident) == 0){
+            cerr << "Error: Undefined constant variable " << *ident << " at line " << lineno << endl;
+            assert(false);
+        }
+        const_value = const_variable_table[*ident];
+    } else{
+        // give error information
+        cerr << "Error: Invalid PrimaryExp kind for EvaluateConstValues" << endl;
+        assert(false);
+    }
+}
+
 void UnaryExp::GenerateIR(){
     // Implementation for IR generation would go here
     if(kind == _PrimaryExp){
@@ -120,12 +170,45 @@ void UnaryExp::GenerateIR(){
         cout << "  " << *varName << " = ";
         if(unary_op->compare("+") == 0){
             // do nothing because +x is just x
-            cout << "add 0, " << *(unary_exp->varName) << "\n";
+            if(const_variable_table.count(*(unary_exp->varName)) > 0){
+                cout << "add 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
+            }else{
+                cout << "add 0, " << *(unary_exp->varName) << "\n";
+            }
         }else if(unary_op->compare("-") == 0){
-            cout << "sub 0, " << *(unary_exp->varName) << "\n";
+            if(const_variable_table.count(*(unary_exp->varName)) > 0){
+                cout << "sub 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
+            }else{
+                cout << "sub 0, " << *(unary_exp->varName) << "\n";
+            }
         } else if(unary_op->compare("!") == 0){
-            cout << "eq " << *(unary_exp->varName) << ", 0\n";
+            if(const_variable_table.count(*(unary_exp->varName)) > 0){
+                cout << "eq 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
+            }else{
+                cout << "eq 0, " << *(unary_exp->varName) << "\n";
+            }
         }
+    }
+}
+
+void UnaryExp::EvaluateConstValues(){
+    if(kind == _PrimaryExp){
+        primary_exp->EvaluateConstValues();
+        const_value = primary_exp->const_value;
+    } else if(kind == _UnaryOp_UnaryExp){
+        unary_exp->EvaluateConstValues();
+        int val = std::get<int>(unary_exp->const_value);
+        if(unary_op->compare("+") == 0){
+            const_value = val;
+        } else if(unary_op->compare("-") == 0){
+            const_value = -val;
+        } else if(unary_op->compare("!") == 0){
+            const_value = (val == 0) ? 1 : 0;
+        }
+    } else{
+        // give error information
+        cerr << "Error: Invalid UnaryExp kind for EvaluateConstValues" << endl;
+        assert(false);
     }
 }
 
@@ -143,7 +226,14 @@ void MulExp::GenerateIR() {
         string leftVar = *(mul_exp->varName);
         string rightVar = *(unary_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
-        
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        } 
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
+
         if(mul_op->compare("*") == 0){
             cout << "  " << *varName << " = mul " << leftVar << ", " << rightVar << "\n";
         } else if(mul_op->compare("/") == 0){
@@ -151,6 +241,32 @@ void MulExp::GenerateIR() {
         } else if(mul_op->compare("%") == 0){
             cout << "  " << *varName << " = mod " << leftVar << ", " << rightVar << "\n";
         } else{
+            cerr << "Error: Invalid MulExp operator for GenerateIR" << endl;
+            assert(false);
+        }
+    }
+}
+
+void MulExp::EvaluateConstValues(){
+    if(kind == _UnaryExp){
+        unary_exp->EvaluateConstValues();
+        const_value = unary_exp->const_value;
+    }
+    else if(kind == _MulExp_MulOp_UnaryExp){
+        mul_exp->EvaluateConstValues();
+        unary_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(mul_exp->const_value);
+        int rightVal = std::get<int>(unary_exp->const_value);
+        
+        if(mul_op->compare("*") == 0){
+            const_value = leftVal * rightVal;
+        } else if(mul_op->compare("/") == 0){
+            const_value = leftVal / rightVal;
+        } else if(mul_op->compare("%") == 0){
+            const_value = leftVal % rightVal;
+        } else{
+            cerr << "Error: Invalid MulExp operator for EvaluateConstValues" << endl;
             assert(false);
         }
     }
@@ -168,12 +284,41 @@ void AddExp::GenerateIR(){
         string leftVar = *(add_exp->varName);
         string rightVar = *(mul_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        }
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
         
         if(add_op->compare("+") == 0){
             cout << "  " << *varName << " = add " << leftVar << ", " << rightVar << "\n";
         } else if(add_op->compare("-") == 0){
             cout << "  " << *varName << " = sub " << leftVar << ", " << rightVar << "\n";
         } else{
+            assert(false);
+        }
+    }
+}
+
+void AddExp::EvaluateConstValues(){
+    if(kind == _MulExp){
+        mul_exp->EvaluateConstValues();
+        const_value = mul_exp->const_value;
+    }else if(kind == _AddExp_AddOp_MulExp){
+        add_exp->EvaluateConstValues();
+        mul_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(add_exp->const_value);
+        int rightVal = std::get<int>(mul_exp->const_value);
+        
+        if(add_op->compare("+") == 0){
+            const_value = leftVal + rightVal;
+        } else if(add_op->compare("-") == 0){
+            const_value = leftVal - rightVal;
+        } else{
+            cerr << "Error: Invalid AddExp operator for EvaluateConstValues" << endl;
             assert(false);
         }
     }
@@ -190,6 +335,13 @@ void RelExp::GenerateIR(){
         string leftVar = *(rel_exp->varName);
         string rightVar = *(add_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        }
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
         
         if(rel_op->compare("<") == 0){
             cout << "  " << *varName << " = lt " << leftVar << ", " << rightVar << "\n";
@@ -200,6 +352,32 @@ void RelExp::GenerateIR(){
         } else if(rel_op->compare(">=") == 0){
             cout << "  " << *varName << " = ge " << leftVar << ", " << rightVar << "\n";
         } else{
+            assert(false);
+        }
+    }
+}
+
+void RelExp::EvaluateConstValues(){
+    if(kind == _AddExp){
+        add_exp->EvaluateConstValues();
+        const_value = add_exp->const_value;
+    }else if(kind == _RelExp_RelOp_AddExp){
+        rel_exp->EvaluateConstValues();
+        add_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(rel_exp->const_value);
+        int rightVal = std::get<int>(add_exp->const_value);
+        
+        if(rel_op->compare("<") == 0){
+            const_value = (leftVal < rightVal) ? 1 : 0;
+        } else if(rel_op->compare(">") == 0){
+            const_value = (leftVal > rightVal) ? 1 : 0;
+        } else if(rel_op->compare("<=") == 0){
+            const_value = (leftVal <= rightVal) ? 1 : 0;
+        } else if(rel_op->compare(">=") == 0){
+            const_value = (leftVal >= rightVal) ? 1 : 0;
+        } else{
+            cerr << "Error: Invalid RelExp operator for EvaluateConstValues" << endl;
             assert(false);
         }
     }
@@ -216,6 +394,13 @@ void EqExp::GenerateIR(){
         string leftVar = *(eq_exp->varName);
         string rightVar = *(rel_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        }
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
         
         if(eq_op->compare("==") == 0){
             cout << "  " << *varName << " = eq " << leftVar << ", " << rightVar << "\n";
@@ -227,6 +412,30 @@ void EqExp::GenerateIR(){
     }
 }
 
+void EqExp::EvaluateConstValues(){
+    if(kind == _RelExp){
+        rel_exp->EvaluateConstValues();
+        const_value = rel_exp->const_value;
+    }else if(kind == _EqExp_EqOp_RelExp){
+        eq_exp->EvaluateConstValues();
+        rel_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(eq_exp->const_value);
+        int rightVal = std::get<int>(rel_exp->const_value);
+        
+        if(eq_op->compare("==") == 0){
+            const_value = (leftVal == rightVal) ? 1 : 0;
+        } else if(eq_op->compare("!=") == 0){
+            const_value = (leftVal != rightVal) ? 1 : 0;
+        } else{
+            cerr << "Error: Invalid EqExp operator for EvaluateConstValues" << endl;
+            assert(false);
+        }
+    }
+}
+
+
+
 void LAndExp::GenerateIR(){
     if(kind == _EqExp){
         eq_exp->GenerateIR();
@@ -237,6 +446,13 @@ void LAndExp::GenerateIR(){
 
         string leftVar = *(land_exp->varName);
         string rightVar = *(eq_exp->varName);
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        }
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
         
         if(land_op->compare("&&") == 0){
             unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
@@ -246,6 +462,26 @@ void LAndExp::GenerateIR(){
             varName = make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = and " << *temp1 << ", " << *temp2 << "\n";
         }else{
+            assert(false);
+        }
+    }
+}
+
+void LAndExp::EvaluateConstValues(){
+    if(kind == _EqExp){
+        eq_exp->EvaluateConstValues();
+        const_value = eq_exp->const_value;
+    }else if(kind == _LAndExp_LAndOp_EqExp){
+        land_exp->EvaluateConstValues();
+        eq_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(land_exp->const_value);
+        int rightVal = std::get<int>(eq_exp->const_value);
+        
+        if(land_op->compare("&&") == 0){
+            const_value = (leftVal != 0 && rightVal != 0) ? 1 : 0;
+        }else{
+            cerr << "Error: Invalid LAndExp operator for EvaluateConstValues" << endl;
             assert(false);
         }
     }
@@ -262,6 +498,13 @@ void LOrExp::GenerateIR(){
 
         string leftVar = *(lor_exp->varName);
         string rightVar = *(land_exp->varName);
+
+        if(const_variable_table.count(leftVar) > 0){
+            leftVar = to_string(const_variable_table[leftVar]);
+        }
+        if(const_variable_table.count(rightVar) > 0){
+            rightVar = to_string(const_variable_table[rightVar]);
+        }
         
         if(lor_op->compare("||") == 0){
             unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
@@ -276,10 +519,33 @@ void LOrExp::GenerateIR(){
     }
 }
 
+void LOrExp::EvaluateConstValues(){
+    if(kind == _LAndExp){
+        land_exp->EvaluateConstValues();
+        const_value = land_exp->const_value;
+    }else if(kind == _LOrExp_LOrOp_LAndExp){
+        lor_exp->EvaluateConstValues();
+        land_exp->EvaluateConstValues();
+
+        int leftVal = std::get<int>(lor_exp->const_value);
+        int rightVal = std::get<int>(land_exp->const_value);
+        
+        if(lor_op->compare("||") == 0){
+            const_value = (leftVal != 0 || rightVal != 0) ? 1 : 0;
+        }else{
+            cerr << "Error: Invalid LOrExp operator for EvaluateConstValues" << endl;
+            assert(false);
+        }
+    }
+}
+
 
 void ConstExp::GenerateIR() {
-    // Implementation for IR generation would go here
-    exp->GenerateIR();
-    varName = std::make_unique<string>(*(exp->varName));
+    // do nothing
+}
+
+void ConstExp::EvaluateConstValues(){
+    exp->EvaluateConstValues();
+    const_value = exp->const_value;
 }
 

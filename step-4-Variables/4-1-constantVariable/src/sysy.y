@@ -47,7 +47,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN 
+%token INT RETURN CONST
 %token <str_val> IDENT PLUS MINUS NOT MUL DIV MOD LE GE LESS GREATER SAME NOTSAME LAND LOR 
 %token <int_val> INT_CONST 
 
@@ -112,7 +112,7 @@ Decl
   ;
 
 ConstDecl
-  : "const" BType ConstDefList ';'{
+  : CONST BType ConstDefList ';'{
     auto bt = $2;
     auto cdl = dynamic_cast<ConstDefList*>($3);
     auto ast = new ConstDecl();
@@ -163,12 +163,16 @@ Block
   ;
 
 BlockItemList
-  : /* empty */
+  : /* empty */{
+    $$ = new BlockItemList();
+  }
   | BlockItemList BlockItem{
     auto bi = dynamic_cast<BlockItem*>($2);
     auto bil = dynamic_cast<BlockItemList*>($1);
     bil->block_items.emplace_back(bi);
+    bil->lineno = @1.first_line;
     $$ = bil;
+    cerr << "[AST] Built BlockItemList at line " << @1.first_line << endl;
   }
   ;
 
@@ -176,6 +180,7 @@ BlockItem
   : Decl {
     auto decl = dynamic_cast<Decl*>($1);
     auto ast = new BlockItem();
+    ast->kind = BlockItem::_Decl;
     ast->decl.reset(decl);
     ast->lineno = @1.first_line;
     $$ = ast;
@@ -184,6 +189,7 @@ BlockItem
   | Stmt {    
     auto stmt = dynamic_cast<Stmt*>($1);
     auto ast = new BlockItem();
+    ast->kind = BlockItem::_Stmt;
     ast->stmt.reset(stmt);
     ast->lineno = @1.first_line;
     $$ = ast;
@@ -342,6 +348,7 @@ AddExp
     $$ = ast;
     cerr << "[AST] Built AddExp at line " << @1.first_line << endl;
   }
+  ;
 
 RelExp
   : AddExp {
@@ -455,6 +462,7 @@ LOrExp
     cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
   }
   ;
+
 ConstInitVal
   : ConstExp {
     auto ce = dynamic_cast<ConstExp*>($1);

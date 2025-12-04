@@ -6,5 +6,8 @@
 
 
 int main(){ 
-    return (--!6);
+    const int a = 5;
+    const int a = 11;
+    const int c = a + b;
+    return c;
 }

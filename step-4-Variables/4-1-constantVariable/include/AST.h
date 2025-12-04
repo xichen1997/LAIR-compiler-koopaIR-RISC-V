@@ -1,14 +1,17 @@
 #pragma once
 #include <iostream>
 #include <memory>
+#include <cassert>
 #include <vector>
 #include <string>
 #include <variant>
+#include <unordered_map>
 #include "koopa.h"
 
 using namespace std;
 
 extern int temp_count;
+extern unordered_map<string, int> const_variable_table;
 
 class BaseAST;
 class CompUnit;
@@ -34,7 +37,7 @@ class UnaryExp;
 class PrimaryExp;
 class Number;
 
-using ConstVal = std::variant<int, float, bool, double> ;
+using ConstVal = std::variant<int, float, bool, double>;
 
 class BaseAST{
     public:
@@ -110,7 +113,7 @@ class Exp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class PrimaryExp : public BaseAST{
@@ -128,7 +131,7 @@ class PrimaryExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class UnaryExp : public BaseAST{
@@ -145,7 +148,7 @@ class UnaryExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class Stmt : public BaseAST{
@@ -171,7 +174,7 @@ class MulExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class AddExp : public BaseAST{
@@ -184,7 +187,7 @@ class AddExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class RelExp : public BaseAST{
@@ -197,7 +200,7 @@ class RelExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class EqExp : public BaseAST{
@@ -210,7 +213,7 @@ class EqExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class LAndExp : public BaseAST{
@@ -223,7 +226,7 @@ class LAndExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class LOrExp : public BaseAST{
@@ -236,7 +239,7 @@ class LOrExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class ConstExp : public BaseAST{
@@ -246,7 +249,7 @@ class ConstExp : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class Decl : public BaseAST{
@@ -254,6 +257,7 @@ class Decl : public BaseAST{
     std::unique_ptr<ConstDecl> const_decl;
 
     void GenerateIR() override;
+    void EvaluateConstValues();
 };
 
 class ConstDecl : public BaseAST{
@@ -262,6 +266,7 @@ class ConstDecl : public BaseAST{
     std::unique_ptr<ConstDefList> const_def_list;
 
     void GenerateIR() override;
+    void EvaluateConstValues();
 };
 
 class ConstDefList : public BaseAST{
@@ -269,6 +274,7 @@ class ConstDefList : public BaseAST{
     std::vector<std::unique_ptr<ConstDef>> const_defs;
 
     void GenerateIR() override;
+    void EvaluateConstValues();
 };
 
 class ConstDef : public BaseAST{
@@ -278,7 +284,7 @@ class ConstDef : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
 
 class ConstInitVal : public BaseAST{
@@ -287,5 +293,5 @@ class ConstInitVal : public BaseAST{
     ConstVal const_value;
 
     void GenerateIR() override;
-    void EvaluateConstValue();
+    void EvaluateConstValues();
 };
