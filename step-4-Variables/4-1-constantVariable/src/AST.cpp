@@ -2,7 +2,7 @@
 
 unordered_map<string, int> const_variable_table;
 unordered_set<string> initialized_variables;
-unordered_set<string> delacred_variables;
+unordered_set<string> declared_variables;
 
 using namespace std;
 
@@ -83,11 +83,11 @@ void VarDefList::GenerateIR(){
 
 void VarDef::GenerateIR(){
     // Implementation for IR generation would go here
-    if(delacred_variables.count(*ident) > 0){
+    if(declared_variables.count(*ident) > 0){
         cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
         assert(false);
     }
-    delacred_variables.insert(*ident);
+    declared_variables.insert(*ident);
     cout << "  @" << *ident << " = alloc i32\n";
     if(init_val){
         init_val->GenerateIR();
@@ -98,12 +98,14 @@ void VarDef::GenerateIR(){
         }  
         // check if the init_val variable is initialized and not temporary variables
         string tmp = *(init_val->varName);
+        cerr << tmp << endl;
 
+        // not temporary variable or Number, then it must be a vairable (const variable has been excluded in the formula above.)
         if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(init_val->varName)) == 0){
             cerr << "Error: Use of uninitialized variable " << *(init_val->varName) << " at line " << lineno << endl;
             assert(false);
         }
-        
+
         cout << "  store " << *(init_val->varName) << ", @" << *ident << "\n";
         initialized_variables.insert(*ident);
     }else{
@@ -149,31 +151,34 @@ void Stmt::GenerateIR() {
     if(kind == _Lval_Assign_Exp){
         exp->GenerateIR();
         // check if lval is not declared, if not then we add it to initialized_variables
-        if(initialized_variables.count(*lval) == 0){
-            initialized_variables.insert(*lval);
+        if(declared_variables.count(*lval) == 0){
+            cerr << "Use Undeclared Vairables to assign Value" << endl;
+            assert(false);
         }
-        if(const_variable_table.count(*(exp->varName)) > 0){
-            cout << "  store " << const_variable_table[*(exp->varName)] << ", @" << *lval << "\n";
-            return;
-        }  
+        // const value(or Number) or temparory value
         cout << "  store " << *(exp->varName) << ", @" << *lval << "\n";
+        // then it must be initialized variables, can be used in the future.
+        initialized_variables.insert(*lval);
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         string tmp = *(exp->varName);
+        // constant value, return directly
         if(const_variable_table.count(*(exp->varName)) > 0){
             cout << "  ret " << const_variable_table[*(exp->varName)] << "\n";
             return;
         } 
-        
+        // uninitialized variable
         if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(exp->varName)) == 0){
             cerr << "Use uninitialized variable as return value" << endl;
             assert(false);
         }
-        if(tmp[0]!='%' && !isdigit(tmp[0])){
-            cout << "  ret @" << *(exp->varName) << "\n";
+        // check if the variable is a variable
+        if(declared_variables.count(*(exp->varName))){
+            temp_count++;
+            cout << "  ret @" << *(exp->varName);
             return;
         }
-        cout << "  ret " << *(exp->varName) << "\n";
+        cout << "  ret " << *(exp->varName);
     }
 }
 
@@ -204,7 +209,13 @@ void PrimaryExp::GenerateIR(){
         varName = std::make_unique<string>(to_string(number->int_const));  
     } else if(kind == _Lval){
         // for Lval, just use the ident as varName
-        varName = std::make_unique<string>(*ident);
+        if(const_variable_table.count(*ident)){
+            varName = std::make_unique<string>(to_string(const_variable_table[*ident]));
+            return;
+        }
+        varName = std::make_unique<string>("%" + to_string(temp_count++));
+        cout <<"  " << *varName << " = "<< "load @" << *ident <<endl;
+
     }
 }
 
@@ -216,9 +227,8 @@ void PrimaryExp::EvaluateConstValues(){
         const_value = number->int_const;
     } else if(kind == _Lval){
         // lookup the const_variable_table to get the value
-        if(const_variable_table.count(*ident) == 0){
-            cerr << "Error: Undefined constant variable " << *ident << " at line " << lineno << endl;
-            assert(false);
+        if(const_variable_table.count(*ident)){
+            const_value = const_variable_table[*ident];
         }
         const_value = const_variable_table[*ident];
     } else{
@@ -234,17 +244,17 @@ void UnaryExp::GenerateIR(){
         primary_exp->GenerateIR();
         varName = std::make_unique<string>(*(primary_exp->varName));
     } else if(kind == _UnaryOp_UnaryExp){
+
+        if(unary_op->compare("+") == 0){
+            // do nothing because +x is just x
+            return;
+        }
+
         unary_exp->GenerateIR();
         varName = std::make_unique<string>("\%" + to_string(temp_count++));
         cout << "  " << *varName << " = ";
-        if(unary_op->compare("+") == 0){
-            // do nothing because +x is just x
-            if(const_variable_table.count(*(unary_exp->varName)) > 0){
-                cout << "add 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
-            }else{
-                cout << "add 0, " << *(unary_exp->varName) << "\n";
-            }
-        }else if(unary_op->compare("-") == 0){
+    
+        if(unary_op->compare("-") == 0){
             if(const_variable_table.count(*(unary_exp->varName)) > 0){
                 cout << "sub 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
             }else{
