@@ -5,40 +5,81 @@ int offset = 0;
 extern int total_variable_number;
 unordered_map<koopa_raw_value_t, int> stack_offset_map;
 unordered_set<koopa_raw_value_t> visited;
+unordered_map<koopa_raw_value_t, int> integer_map;
+
+void LoadFromStack(const std::string &reg, int offset) {
+  if (offset > 2047 || offset < -2048) {
+      cout << "  li t1, " << offset << endl;
+      cout << "  add t1, sp, t1" << endl;
+      cout << "  lw " << reg << ", 0(t1)" << endl;
+  } else {
+      cout << "  lw " << reg << ", " << offset << "(sp)" << endl;
+  }
+}
+
+void StoreToStack(const std::string &reg, int offset) {
+  if (offset > 2047 || offset < -2048) {
+      cout << "  li t1, " << offset << endl;
+      cout << "  add t1, sp, t1" << endl;
+      cout << "  sw " << reg << ", 0(t1)" << endl;
+  } else {
+      cout << "  sw " << reg << ", " << offset << "(sp)" << endl;
+  }
+}
+
+
 
 void Visit(const koopa_raw_integer_t &integer, const koopa_raw_value_t &value) {
     // do nothing, termination node
+    integer_map[value] = integer.value;
    }
   
 void Visit(const koopa_raw_return_t &ret) {
-    if (ret.value->ty->tag == KOOPA_RTT_INT32) {
-      Visit(ret.value);
-      if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
-        cout << "  li a0, " << ret.value << endl;
-        return;
-      }
-      int offset = stack_offset_map[ret.value];
-      cout << "  lw a0, " << offset << "(sp)" << endl; 
-    }else if(ret.value->ty->tag == KOOPA_RTT_UNIT){
-      cout << "  ret";
+
+  int sp_gap = total_variable_number;
+  sp_gap = sp_gap * 4;
+  sp_gap = (sp_gap + 15) / 16 * 16;
+
+  // if the ret.value exists, then check the value is a variable
+  if (ret.value) {
+    Visit(ret.value);
+    if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
+      cout << "  li a0, " << ret.value->kind.data.integer.value << endl;
+    }else{
+      LoadFromStack("a0", stack_offset_map[ret.value]);
     }
   }
+
+  // return to the previous stack frame
+  if(sp_gap > 2047){
+    cout << "  li t0, 0" << sp_gap << endl;
+    cout << "  add sp, sp, t0" << endl;
+  }else{
+    cout << "  addi sp, sp, " << sp_gap << endl;
+  }
+  cout << "  ret" << endl;
+}
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
   // do nothing
   Visit(load.src);
+  stack_offset_map[value] = offset*4;
+  offset++;
+  LoadFromStack("t0", stack_offset_map[load.src]);
+  StoreToStack("t0", stack_offset_map[value]);
 }
 void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   Visit(store.value);
   Visit(store.dest);
-  int offset = stack_offset_map[store.dest];
   // pure constant integer
+  cerr << store.value->kind.data.integer.value << endl;
+  cerr << offset << endl;
   if(store.value->kind.tag == KOOPA_RVT_INTEGER){
     cout << "  li t0, " << store.value->kind.data.integer.value << endl;
   }else{
-    cout << "  lw t0, " << stack_offset_map[store.value] << "(sp)" << endl;
+    LoadFromStack("t0", stack_offset_map[store.value]);
   }
-  cout << "  sw t0, " << offset << "(sp)" << endl;
+  StoreToStack("t0", stack_offset_map[store.dest]);
 }
   
 void Visit(const koopa_raw_value_t &value) {
@@ -70,7 +111,7 @@ void Visit(const koopa_raw_value_t &value) {
         Visit(kind.data.load, value);
         break;
       case KOOPA_RVT_STORE:
-        Visit(kind.data.load, value);
+        Visit(kind.data.store, value);
         break;
       default:
         assert(false);
@@ -93,13 +134,7 @@ void Visit(const koopa_raw_function_t &func) {
       cout << "  addi sp, sp, " << -sp_gap << endl;
     }
     Visit(func->bbs);
-    if(sp_gap > 2047){
-      cout << "  li t0, " << sp_gap << endl;
-      cout << "  add sp, sp, t0" << endl;
-    }else{
-      cout << "  addi sp, sp, " << sp_gap << endl;
-    }
-    cout << "  ret" << endl;
+   
   }
   
 void Visit(const koopa_raw_slice_t &slice) {
@@ -134,18 +169,19 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value) {
 
     string lhs = "t0";
     string rhs = "t1";
-    string result = "t0"; // write to t0 and then write back to stack memory.
+    stack_offset_map[value] = offset*4;
+    offset++;
 
     if(binary.lhs->kind.tag == KOOPA_RVT_INTEGER){
       cout << "  li " << "t0, " <<  binary.lhs->kind.data.integer.value << endl;
     }else {
-      cout << "  lw " << "t1, " << stack_offset_map[binary.lhs] <<"(sp)" << endl;
+      LoadFromStack("t0", stack_offset_map[binary.lhs]);
     }
 
     if(binary.rhs->kind.tag == KOOPA_RVT_INTEGER){
-      cout << "  li " << "t0, " <<  binary.rhs->kind.data.integer.value << endl;
+      cout << "  li " << "t1, " <<  binary.rhs->kind.data.integer.value << endl;
     }else {
-      cout << "  lw " << "t1, " << stack_offset_map[binary.rhs] <<"(sp)" << endl;
+      LoadFromStack("t1", stack_offset_map[binary.rhs]);
     }
 
     switch (binary.op){
@@ -195,5 +231,6 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value) {
       default:
         assert(false);
     }
+    StoreToStack("t0", stack_offset_map[value]);
   }
   

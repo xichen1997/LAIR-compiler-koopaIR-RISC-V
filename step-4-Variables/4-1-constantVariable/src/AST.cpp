@@ -102,7 +102,6 @@ void VarDef::GenerateIR(){
         }  
         // check if the init_val variable is initialized and not temporary variables
         string tmp = *(init_val->varName);
-        cerr << tmp << endl;
 
         // not temporary variable or Number, then it must be a vairable (const variable has been excluded in the formula above.)
         if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(init_val->varName)) == 0){
