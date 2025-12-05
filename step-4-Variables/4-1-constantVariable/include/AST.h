@@ -15,6 +15,7 @@ extern int temp_count;
 extern unordered_map<string, int> const_variable_table;
 extern unordered_set<string> initialized_variables;
 extern unordered_set<string> delacred_variables;
+extern int total_variable_number;
 
 class BaseAST;
 class CompUnit;

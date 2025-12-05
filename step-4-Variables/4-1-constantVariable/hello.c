@@ -1,5 +1,3 @@
-int main(){ 
-    const int b = 10;
-    int a = 5;
-    return a;
-}
+int main() {
+    return -10;
+  }

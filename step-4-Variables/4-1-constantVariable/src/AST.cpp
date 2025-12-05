@@ -4,13 +4,16 @@ unordered_map<string, int> const_variable_table;
 unordered_set<string> initialized_variables;
 unordered_set<string> declared_variables;
 
+int temp_count = 0;
+int total_variable_number = 0;
+
 using namespace std;
 
-int temp_count = 0;
 
 void CompUnit::GenerateIR() {
     // Implementation for IR generation would go here
     func_def->GenerateIR();
+    total_variable_number += temp_count; // temp vars and vars total.
 }
 
 void FuncDef::GenerateIR() {
@@ -88,6 +91,7 @@ void VarDef::GenerateIR(){
         assert(false);
     }
     declared_variables.insert(*ident);
+    total_variable_number++;
     cout << "  @" << *ident << " = alloc i32\n";
     if(init_val){
         init_val->GenerateIR();
@@ -108,8 +112,6 @@ void VarDef::GenerateIR(){
 
         cout << "  store " << *(init_val->varName) << ", @" << *ident << "\n";
         initialized_variables.insert(*ident);
-    }else{
-        cerr << "uninitialized!" << endl;
     }
 }
 
@@ -161,23 +163,6 @@ void Stmt::GenerateIR() {
         initialized_variables.insert(*lval);
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
-        string tmp = *(exp->varName);
-        // constant value, return directly
-        if(const_variable_table.count(*(exp->varName)) > 0){
-            cout << "  ret " << const_variable_table[*(exp->varName)] << "\n";
-            return;
-        } 
-        // uninitialized variable
-        if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(exp->varName)) == 0){
-            cerr << "Use uninitialized variable as return value" << endl;
-            assert(false);
-        }
-        // check if the variable is a variable
-        if(declared_variables.count(*(exp->varName))){
-            temp_count++;
-            cout << "  ret @" << *(exp->varName);
-            return;
-        }
         cout << "  ret " << *(exp->varName);
     }
 }
@@ -245,15 +230,12 @@ void UnaryExp::GenerateIR(){
         varName = std::make_unique<string>(*(primary_exp->varName));
     } else if(kind == _UnaryOp_UnaryExp){
 
-        if(unary_op->compare("+") == 0){
-            // do nothing because +x is just x
-            return;
-        }
+        
 
         unary_exp->GenerateIR();
         varName = std::make_unique<string>("\%" + to_string(temp_count++));
         cout << "  " << *varName << " = ";
-    
+        
         if(unary_op->compare("-") == 0){
             if(const_variable_table.count(*(unary_exp->varName)) > 0){
                 cout << "sub 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
@@ -265,6 +247,12 @@ void UnaryExp::GenerateIR(){
                 cout << "eq 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
             }else{
                 cout << "eq 0, " << *(unary_exp->varName) << "\n";
+            }
+        } else if(unary_op->compare("+") == 0){
+            if(const_variable_table.count(*(unary_exp->varName))){
+                cout << "add 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
+            }else{
+                cout << "add 0, " << *(unary_exp->varName) << "\n";
             }
         }
     }

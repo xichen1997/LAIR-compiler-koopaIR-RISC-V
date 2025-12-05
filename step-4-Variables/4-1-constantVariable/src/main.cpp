@@ -9,6 +9,8 @@
 #include "../include/Koopa2RISCV.h"
 #include "koopa.h"
 
+extern int total_variable_number;
+
 
 using namespace std;
 
@@ -47,6 +49,7 @@ int main(int argc, const char *argv[]) {
       freopen(output, "w", stdout);
       ast->GenerateIR();
       fclose(stdout);
+      cerr << total_variable_number << " variables" << endl;
   } else if(string(mode) == "-riscv"){
       freopen("temp.koopa", "w", stdout);
       ast->GenerateIR();
