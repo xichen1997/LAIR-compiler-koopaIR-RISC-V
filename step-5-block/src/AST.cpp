@@ -1,14 +1,24 @@
 #include "../include/AST.h"
 
-unordered_map<string, int> const_variable_table;
-unordered_set<string> initialized_variables;
-unordered_set<string> declared_variables;
+struct StackVariable{
+    unordered_map<string, int> const_variable_table;
+    unordered_map<string, string> initialized_variables;
+    unordered_map<string, string> declared_variables;
+} stackVariable;
+
+vector<std::unique_ptr<StackVariable>> stack_variable_table;
 
 int temp_count = 0;
 int total_variable_number = 0;
 
-using namespace std;
+int local_variable_index = 0;
 
+
+StackVariable* checkIsConstant(const string& tmp);
+StackVariable* checkIsDeclared(const string& tmp);
+StackVariable* checkIsInitialized(const string& tmp);
+
+using namespace std;
 
 void CompUnit::GenerateIR() {
     // Implementation for IR generation would go here
@@ -20,7 +30,10 @@ void FuncDef::GenerateIR() {
     // Implementation for IR generation would go here
     cout << "fun @" << *ident << "(): "; 
     func_type->GenerateIR();
+    cout << "{\n";
+    cout << "\%entry:\n";
     block->GenerateIR();
+    cout << "\n}\n";
 }
 
 void Decl::GenerateIR(){
@@ -54,11 +67,12 @@ void ConstDef::EvaluateConstValues(){
     const_init_val->EvaluateConstValues();
     const_value = const_init_val->const_value;
     // update the const_variable_table
-    if(const_variable_table.count(*ident) > 0){
+    StackVariable* current_variable_table_location = stack_variable_table.back().get();
+    if(current_variable_table_location->const_variable_table.count(*ident) > 0){
         cerr << "Error: Redefinition of constant variable " << *ident << " at line " << lineno << endl;
         assert(false);
     }
-    const_variable_table[*ident] = std::get<int>(const_value);
+    current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
     
 }
 
@@ -87,31 +101,30 @@ void VarDefList::GenerateIR(){
 
 void VarDef::GenerateIR(){
     // Implementation for IR generation would go here
-    if(declared_variables.count(*ident) > 0){
+    StackVariable* current_variable_table_location = stack_variable_table.back().get();
+    cerr << "Generating IR for variable: " << *ident << endl;
+    if(current_variable_table_location->declared_variables.count(*ident)){
         cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
         assert(false);
     }
-    declared_variables.insert(*ident);
+    // declare it here
+    current_variable_table_location->declared_variables[*ident] = *ident + "___" + to_string(local_variable_index);
+
     total_variable_number++;
-    cout << "  @" << *ident << " = alloc i32\n";
+
+    cout << "  @" << *ident + "___" + to_string(local_variable_index) << " = alloc i32\n";
+
     if(init_val){
         init_val->GenerateIR();
-        // constant folding for init_val
-        if(const_variable_table.count(*(init_val->varName)) > 0){
-            cout << "  store " << const_variable_table[*(init_val->varName)] << ", @" << *ident << "\n";
-            return;
-        }  
         // check if the init_val variable is initialized and not temporary variables
         string tmp = *(init_val->varName);
 
-        // not temporary variable or Number, then it must be a vairable (const variable has been excluded in the formula above.)
-        if(tmp[0]!='%' && !isdigit(tmp[0]) && initialized_variables.count(*(init_val->varName)) == 0){
-            cerr << "Error: Use of uninitialized variable " << *(init_val->varName) << " at line " << lineno << endl;
-            assert(false);
-        }
+        StackVariable* possible_variable_table_location = checkIsInitialized(*ident);
+        // comes from primaryexp so it must have value or it will exit earlier.
+        cout << "  store " << *(init_val->varName) << ", @" << *ident + "___" + to_string(local_variable_index) << "\n";
 
-        cout << "  store " << *(init_val->varName) << ", @" << *ident << "\n";
-        initialized_variables.insert(*ident);
+        // initialize it later
+        current_variable_table_location->initialized_variables[*ident] = *ident + "___" + to_string(local_variable_index);
     }
 }
 
@@ -128,11 +141,18 @@ void FuncType::GenerateIR() {
 }
 
 void Block::GenerateIR() {
+    // create new local variables space
+    auto ptr = std::make_unique<StackVariable>();
+    stack_variable_table.push_back(std::move(ptr));
+    
+    // monotonic increasing to combine with variable name 
+    local_variable_index++; 
+
     // Implementation for IR generation would go here
-    cout << "{\n";
-    cout << "\%entry:\n";
     block_item_list->GenerateIR();
-    cout << "\n}\n";
+    
+    // free the variable space, unique_ptr will collect the space safely.
+    stack_variable_table.pop_back();
 }
 
 void BlockItemList::GenerateIR() {
@@ -153,17 +173,24 @@ void Stmt::GenerateIR() {
     if(kind == _Lval_Assign_Exp){
         exp->GenerateIR();
         // check if lval is not declared, if not then we add it to initialized_variables
-        if(declared_variables.count(*lval) == 0){
+        StackVariable* possible_variable_table_location = checkIsDeclared(*lval);
+        if(possible_variable_table_location == nullptr){
             cerr << "Use Undeclared Vairables to assign Value" << endl;
             assert(false);
         }
         // const value(or Number) or temparory value
-        cout << "  store " << *(exp->varName) << ", @" << *lval << "\n";
+        cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*lval] << "\n";
         // then it must be initialized variables, can be used in the future.
-        initialized_variables.insert(*lval);
+        possible_variable_table_location->initialized_variables[*lval] = possible_variable_table_location->declared_variables[*lval];
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         cout << "  ret " << *(exp->varName);
+    } else if(kind == _Exp){
+        exp->GenerateIR();
+    } else if(kind == _Empty){
+        // do nothing
+    } else if(kind == _Block){
+        block->GenerateIR();
     }
 }
 
@@ -195,13 +222,30 @@ void PrimaryExp::GenerateIR(){
         varName = std::make_unique<string>(to_string(number->int_const));  
     } else if(kind == _Lval){
         // for Lval, just use the ident as varName
-        if(const_variable_table.count(*ident)){
-            varName = std::make_unique<string>(to_string(const_variable_table[*ident]));
+        // already do the constant folding. So the upstream node don't need to care.
+        StackVariable* possible_variable_table_location = checkIsConstant(*ident);
+        if(possible_variable_table_location != nullptr){
+            varName = std::make_unique<string>(to_string(possible_variable_table_location->const_variable_table[*ident]));
             return;
         }
-        varName = std::make_unique<string>("%" + to_string(temp_count++));
-        cout <<"  " << *varName << " = "<< "load @" << *ident <<endl;
 
+        // check if the vairable is not declared 
+        possible_variable_table_location = checkIsDeclared(*ident);
+        if(possible_variable_table_location == nullptr){
+            cerr << "Error: variable '" << *ident << "' is not declared" << endl;
+            assert(false);
+        }
+
+        // is initialized?
+        possible_variable_table_location = checkIsInitialized(*ident); 
+        if(possible_variable_table_location == nullptr){
+            cerr << "Error: variable '" << *ident << "' is not initiailized" << endl;
+            assert(false);
+        }
+
+        // *ident is the original value, when generating IR must use the hashed value.
+        varName = std::make_unique<string>("%" + to_string(temp_count++));
+        cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] <<endl;
     }
 }
 
@@ -213,11 +257,12 @@ void PrimaryExp::EvaluateConstValues(){
         const_value = number->int_const;
     } else if(kind == _Lval){
         // lookup the const_variable_table to get the value
-        if(!const_variable_table.count(*ident)){
+        StackVariable* possible_variable_table_location = checkIsConstant(*ident);
+        if(possible_variable_table_location == nullptr){
             cerr << "Error: use not constant symbol to generate another constant variable." << endl;
             assert(false);
         }
-        const_value = const_variable_table[*ident];
+        const_value = possible_variable_table_location->const_variable_table[*ident];
     } else{
         // give error information
         cerr << "Error: Invalid PrimaryExp kind for EvaluateConstValues" << endl;
@@ -233,30 +278,16 @@ void UnaryExp::GenerateIR(){
         varName = std::make_unique<string>(*(primary_exp->varName));
     } else if(kind == _UnaryOp_UnaryExp){
 
-        
-
         unary_exp->GenerateIR();
         varName = std::make_unique<string>("\%" + to_string(temp_count++));
         cout << "  " << *varName << " = ";
         
         if(unary_op->compare("-") == 0){
-            if(const_variable_table.count(*(unary_exp->varName)) > 0){
-                cout << "sub 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
-            }else{
-                cout << "sub 0, " << *(unary_exp->varName) << "\n";
-            }
+            cout << "sub 0, " << *(unary_exp->varName) << endl;
         } else if(unary_op->compare("!") == 0){
-            if(const_variable_table.count(*(unary_exp->varName)) > 0){
-                cout << "eq 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
-            }else{
-                cout << "eq 0, " << *(unary_exp->varName) << "\n";
-            }
+            cout << "eq 0, " << *(unary_exp->varName) << endl;
         } else if(unary_op->compare("+") == 0){
-            if(const_variable_table.count(*(unary_exp->varName))){
-                cout << "add 0, " << const_variable_table[*(unary_exp->varName)] << "\n";
-            }else{
-                cout << "add 0, " << *(unary_exp->varName) << "\n";
-            }
+            cout << "add 0, " << *(unary_exp->varName) << endl;
         }
     }
 }
@@ -297,13 +328,6 @@ void MulExp::GenerateIR() {
         string leftVar = *(mul_exp->varName);
         string rightVar = *(unary_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
-
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        } 
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
 
         if(mul_op->compare("*") == 0){
             cout << "  " << *varName << " = mul " << leftVar << ", " << rightVar << "\n";
@@ -357,13 +381,6 @@ void AddExp::GenerateIR(){
         string rightVar = *(mul_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
 
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        }
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
-        
         if(add_op->compare("+") == 0){
             cout << "  " << *varName << " = add " << leftVar << ", " << rightVar << "\n";
         } else if(add_op->compare("-") == 0){
@@ -409,13 +426,6 @@ void RelExp::GenerateIR(){
         string leftVar = *(rel_exp->varName);
         string rightVar = *(add_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
-
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        }
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
         
         if(rel_op->compare("<") == 0){
             cout << "  " << *varName << " = lt " << leftVar << ", " << rightVar << "\n";
@@ -470,13 +480,6 @@ void EqExp::GenerateIR(){
         string leftVar = *(eq_exp->varName);
         string rightVar = *(rel_exp->varName);
         varName = make_unique<string>("\%" + to_string(temp_count++));
-
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        }
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
         
         if(eq_op->compare("==") == 0){
             cout << "  " << *varName << " = eq " << leftVar << ", " << rightVar << "\n";
@@ -524,13 +527,6 @@ void LAndExp::GenerateIR(){
 
         string leftVar = *(land_exp->varName);
         string rightVar = *(eq_exp->varName);
-
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        }
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
         
         if(land_op->compare("&&") == 0){
             unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
@@ -579,13 +575,6 @@ void LOrExp::GenerateIR(){
         string leftVar = *(lor_exp->varName);
         string rightVar = *(land_exp->varName);
 
-        if(const_variable_table.count(leftVar) > 0){
-            leftVar = to_string(const_variable_table[leftVar]);
-        }
-        if(const_variable_table.count(rightVar) > 0){
-            rightVar = to_string(const_variable_table[rightVar]);
-        }
-        
         if(lor_op->compare("||") == 0){
             unique_ptr<string> temp1 = make_unique<string>("\%" + to_string(temp_count++));
             unique_ptr<string> temp2 = make_unique<string>("\%" + to_string(temp_count++));
@@ -631,3 +620,34 @@ void ConstExp::EvaluateConstValues(){
     const_value = exp->const_value;
 }
 
+
+
+StackVariable* checkIsDeclared(const string &symbol){
+    for(int i = stack_variable_table.size() - 1; i >=0; i--){
+        StackVariable* ptr = stack_variable_table[i].get();
+        if(ptr->declared_variables.count(symbol)){
+            return ptr;
+        }
+    }
+    return nullptr;
+}
+
+StackVariable* checkIsInitialized(const string &symbol){
+    for(int i = stack_variable_table.size() - 1; i >=0; i--){
+        StackVariable* ptr = stack_variable_table[i].get();
+        if(ptr->initialized_variables.count(symbol)){
+            return ptr;
+        }
+    }
+    return nullptr;
+}
+
+StackVariable* checkIsConstant(const string &symbol){
+    for(int i = stack_variable_table.size() - 1; i >=0; i--){
+        StackVariable* ptr = stack_variable_table[i].get();
+        if(ptr->const_variable_table.count(symbol)){
+            return ptr;
+        }
+    }
+    return nullptr;
+}
