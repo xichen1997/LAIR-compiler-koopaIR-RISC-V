@@ -108,11 +108,11 @@ void VarDef::GenerateIR(){
         assert(false);
     }
     // declare it here
-    current_variable_table_location->declared_variables[*ident] = *ident + "___" + to_string(local_variable_index);
+    current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index);
 
     total_variable_number++;
 
-    cout << "  @" << *ident + "___" + to_string(local_variable_index) << " = alloc i32\n";
+    cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
 
     if(init_val){
         init_val->GenerateIR();
@@ -121,10 +121,10 @@ void VarDef::GenerateIR(){
 
         StackVariable* possible_variable_table_location = checkIsInitialized(*ident);
         // comes from primaryexp so it must have value or it will exit earlier.
-        cout << "  store " << *(init_val->varName) << ", @" << *ident + "___" + to_string(local_variable_index) << "\n";
+        cout << "  store " << *(init_val->varName) << ", @" << *ident + "_" + to_string(local_variable_index) << "\n";
 
         // initialize it later
-        current_variable_table_location->initialized_variables[*ident] = *ident + "___" + to_string(local_variable_index);
+        current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
     }
 }
 
