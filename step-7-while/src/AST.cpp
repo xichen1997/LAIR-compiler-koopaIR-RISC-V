@@ -14,6 +14,8 @@ int total_variable_number = 0;
 int if_control_index = 0; // to differentiate different if else block.
 int logic_operator_index = 0; // use for && and || for shortcut
 int local_variable_index = 0; // only increase while in a new block or function.
+int while_index = 0; // for increase when a new while block is created.
+
 
 
 StackVariable* checkIsConstant(const string& tmp);
@@ -249,6 +251,53 @@ void Stmt::GenerateIR() {
         cout << endl;
 
         cout << "\%end_" << tmp_index << ":" << endl;
+    } else if(kind == _While_Stmt){
+        // the recursive situation might show up, use tep_while_index to prevent mess.
+        while_index++;
+        int tmp_while_index = while_index;
+        whilestmt->current_while_index = while_index;
+
+        auto while_entry_name = "\%while_entry_" + to_string(tmp_while_index);
+        auto while_stmt_name = "\%while_stmt_" + to_string(tmp_while_index);
+        auto while_next_name = "\%while_next_" + to_string(tmp_while_index);
+
+        cout << "  jump " << while_entry_name << endl;
+        cout <<endl; 
+
+        // while entry block
+        cout << while_entry_name << ":" << endl;
+        exp->GenerateIR();
+        cout << "  br " << *(exp->varName) << ", " << while_stmt_name;
+        cout << endl;
+        
+        // while stmt block
+        cout <<  while_stmt_name << ":" << endl;
+        whilestmt->GenerateIR();
+        cout << "  jump " << while_entry_name << endl;
+        cout << endl;
+
+        // next block
+        cout << while_next_name << ":" <<endl;
+
+    } else if (kind == _Break){
+        if(!current_while_index){
+            cerr << "The break; statement is not inside a while loop" << endl;
+            assert(false);
+        }
+        auto while_next_name = "\%while_next_" + to_string(current_while_index);
+
+        cout << "  jump " << while_next_name << endl;
+        cout << endl;
+
+    } else if (kind == _Continue){
+        if(!current_while_index){
+            cerr << "The continue; statement is not inside a while loop" << endl;
+            assert(false);
+        }
+        auto while_entry_name = "\%while_entry_" + to_string(current_while_index);
+
+        cout << "  jump " << while_entry_name << endl;
+        cout << endl;
     }
 }
 

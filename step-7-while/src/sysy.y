@@ -47,7 +47,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST IF ELSE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token <str_val> IDENT PLUS MINUS NOT MUL DIV MOD LE GE LESS GREATER SAME NOTSAME LAND LOR 
 %token <int_val> INT_CONST 
 
@@ -320,6 +320,28 @@ Stmt
     ast->exp.reset(e);
     ast->ifstmt.reset(ifstmt);
     ast->elsestmt.reset(elsestmt);
+    $$ = ast;
+    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+  }
+  | WHILE '(' Exp ')' Stmt{
+    auto ast = new Stmt();
+    auto e = dynamic_cast<Exp*>($3);
+    auto whilestmt = dynamic_cast<Stmt*>($5);
+    ast->kind = Stmt::_While_Stmt;
+    ast->exp.reset(e);
+    ast->whilestmt.reset(whilestmt);
+    $$ = ast;
+    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+  }
+  | BREAK ';' {
+    auto ast = new Stmt();
+    ast->kind = Stmt::_Break;
+    $$ = ast;
+    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+  }
+  | CONTINUE ';' {
+    auto ast = new Stmt();
+    ast->kind = Stmt::_Continue;
     $$ = ast;
     cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }

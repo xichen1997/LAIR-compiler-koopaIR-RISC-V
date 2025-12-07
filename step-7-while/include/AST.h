@@ -51,6 +51,7 @@ class BaseAST{
     public:
     int lineno;
     bool has_return;
+    int current_while_index;
     virtual ~BaseAST() = default;
 
     virtual void GenerateIR() = 0;
@@ -169,13 +170,17 @@ class Stmt : public BaseAST{
         _Empty,
         _Block,
         _If_Stmt,
-        _If_Stmt_Else_Stmt
+        _If_Stmt_Else_Stmt,
+        _While_Stmt,
+        _Break,
+        _Continue
     }kind;
     std::unique_ptr<Exp> exp;
     std::unique_ptr<string> lval;
     std::unique_ptr<Block> block;
     std::unique_ptr<Stmt> ifstmt;
     std::unique_ptr<Stmt> elsestmt;
+    std::unique_ptr<Stmt> whilestmt;
 
     void GenerateIR() override;
 };
