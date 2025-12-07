@@ -588,6 +588,7 @@ InitVal
     $$ = ast;
     cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
   }
+  ;
 
 
 ConstExp

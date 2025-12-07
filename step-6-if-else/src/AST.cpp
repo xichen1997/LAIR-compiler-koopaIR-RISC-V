@@ -150,6 +150,7 @@ void Block::GenerateIR() {
 
     // Implementation for IR generation would go here
     block_item_list->GenerateIR();
+    if(block_item_list->has_return) has_return = true;
     
     // free the variable space, unique_ptr will collect the space safely.
     stack_variable_table.pop_back();
@@ -158,6 +159,11 @@ void Block::GenerateIR() {
 void BlockItemList::GenerateIR() {
     for(auto& block_item : block_items){
         block_item->GenerateIR();
+        if(block_item->has_return) {
+            has_return = true;
+            // early return here, if there is one block item has return then there is no need to generate other codes.
+            return;
+        }
     }
 }
 
@@ -166,6 +172,7 @@ void BlockItem::GenerateIR() {
         decl->GenerateIR();
     } else if(kind == _Stmt){
         stmt->GenerateIR();
+        if(stmt->has_return) has_return = true;
     }
 }
 
@@ -185,60 +192,62 @@ void Stmt::GenerateIR() {
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         cout << "  ret " << *(exp->varName) << endl;
+        has_return = true;
     } else if(kind == _Exp){
         exp->GenerateIR();
     } else if(kind == _Empty){
         // do nothing
     } else if(kind == _Block){
         block->GenerateIR();
+        if(block->has_return) has_return = true;
     } else if(kind == _If_Stmt){
         // add this line in the front in case of this is a nested if-else statement.   
-        if_control_index++;
+        int tmp_index = if_control_index++;
         exp->GenerateIR();
-        cout << "  br " << *(exp->varName) << ", \%then_" << if_control_index << ", \%else_" << if_control_index << endl;
+        cout << "  br " << *(exp->varName) << ", \%then_" << tmp_index << ", \%else_" << tmp_index << endl;
         cout << endl;
 
-        cout << "\%then_" << if_control_index << ":" << endl;
+        cout << "\%then_" << tmp_index << ":" << endl;
         ifstmt->GenerateIR();
-        if(ifstmt->kind == _Return_Exp){
+        if(ifstmt->has_return){
             // do nothing, must have a ret 
         }else{
-            cout << "  jump" << " \%end_" << if_control_index << endl;
+            cout << "  jump" << " \%end_" << tmp_index << endl;
         }
         cout << endl;
 
-        cout << "\%else_" << if_control_index << ":" << endl;
-        cout << "  jump" <<" \%end_" << if_control_index << endl;
+        cout << "\%else_" << tmp_index << ":" << endl;
+        cout << "  jump" <<" \%end_" << tmp_index << endl;
         cout << endl;
 
-        cout << "\%end_" << if_control_index << ":" << endl;
+        cout << "\%end_" << tmp_index << ":" << endl;
 
     } else if(kind == _If_Stmt_Else_Stmt){
-        if_control_index++;
+        int tmp_index = if_control_index++;
         exp->GenerateIR();
 
-        cout << "  br " << *(exp->varName) << ", \%then_" << if_control_index << ", \%else_" << if_control_index << endl;
+        cout << "  br " << *(exp->varName) << ", \%then_" << tmp_index << ", \%else_" << tmp_index << endl;
         cout << endl;
 
-        cout << "\%then_" << if_control_index << ":" << endl;
+        cout << "\%then_" << tmp_index << ":" << endl;
         ifstmt->GenerateIR();
-        if(ifstmt->kind == _Return_Exp){
+        if(ifstmt->has_return){
             // do nothing, must have a ret 
         }else{
-            cout << "  jump" << " \%end_" << if_control_index << endl;
+            cout << "  jump" << " \%end_" << tmp_index << endl;
         }
         cout << endl;
 
-        cout << "\%else_" << if_control_index << ":" << endl;
+        cout << "\%else_" << tmp_index << ":" << endl;
         elsestmt->GenerateIR();
-        if(elsestmt->kind == _Return_Exp){
+        if(elsestmt->has_return){
             // do nothing, must have a ret 
         }else{
-            cout << "  jump" << " \%end_" << if_control_index << endl;
+            cout << "  jump" << " \%end_" << tmp_index << endl;
         }
         cout << endl;
 
-        cout << "\%end_" << if_control_index << ":" << endl;
+        cout << "\%end_" << tmp_index << ":" << endl;
     }
 }
 

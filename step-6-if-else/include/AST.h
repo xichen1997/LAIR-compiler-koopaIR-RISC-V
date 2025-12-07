@@ -50,6 +50,7 @@ using ConstVal = std::variant<int, float, bool, double>;
 class BaseAST{
     public:
     int lineno;
+    bool has_return;
     virtual ~BaseAST() = default;
 
     virtual void GenerateIR() = 0;
