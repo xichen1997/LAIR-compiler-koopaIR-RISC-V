@@ -7,6 +7,10 @@ unordered_map<koopa_raw_value_t, int> stack_offset_map;
 unordered_set<koopa_raw_value_t> visited;
 unordered_map<koopa_raw_value_t, int> integer_map;
 
+string printBBName(const string & str){
+  return str.substr(1);
+}
+
 void LoadFromStack(const std::string &reg, int offset) {
   if (offset > 2047 || offset < -2048) {
       cout << "  li t1, " << offset << endl;
@@ -67,20 +71,13 @@ void Visit(const koopa_raw_branch_t &branch, const koopa_raw_value_t &value){
   }else{
     LoadFromStack("t0", stack_offset_map[branch.cond]);
   }
-  cout << "  br " << "t0" << ", " << branch.true_bb->name <<", " <<branch.false_bb->name << endl;
-  cout << endl;
-
-  cout << branch.true_bb->name << ":" << endl;
-  Visit(branch.true_bb);
-  cout << endl;
-
-  cout << branch.false_bb->name << ":" << endl;
-  Visit(branch.false_bb);
+  cout << "  bnez " << "t0" << ", " << printBBName(branch.true_bb->name) << endl;
+  cout << "  j " << printBBName(branch.false_bb->name) << endl;
   cout << endl;
 }
 
 void Visit(const koopa_raw_jump_t &jump, const koopa_raw_value_t &value){
-  cout << "  j " << jump.target->name <<endl; 
+  cout << "  j " << printBBName(jump.target->name) <<endl; 
   // Visit(jump.target);
 
 }
@@ -149,7 +146,10 @@ void Visit(const koopa_raw_value_t &value) {
     }
   }
   
-void Visit(const koopa_raw_basic_block_t &bb) { Visit(bb->insts); }
+void Visit(const koopa_raw_basic_block_t &bb) { 
+  cout << printBBName(bb->name) << ":" << endl;
+  Visit(bb->insts); 
+}
   
 void Visit(const koopa_raw_function_t &func) {
     cout << "  .globl " << func->name + 1 << endl;  // skip the '@' character

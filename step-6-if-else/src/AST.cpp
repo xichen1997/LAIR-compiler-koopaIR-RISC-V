@@ -12,6 +12,7 @@ int temp_count = 0;
 int total_variable_number = 0;
 
 int if_control_index = 0; // to differentiate different if else block.
+int logic_operator_index = 0; // use for && and || for shortcut
 int local_variable_index = 0; // only increase while in a new block or function.
 
 
