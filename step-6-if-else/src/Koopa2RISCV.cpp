@@ -60,6 +60,31 @@ void Visit(const koopa_raw_return_t &ret) {
   cout << "  ret" << endl;
 }
 
+void Visit(const koopa_raw_branch_t &branch, const koopa_raw_value_t &value){
+  Visit(branch.cond);
+  if(branch.cond->kind.tag == KOOPA_RVT_INTEGER){
+    cout << "  li t0, " << branch.cond->kind.data.integer.value << endl;
+  }else{
+    LoadFromStack("t0", stack_offset_map[branch.cond]);
+  }
+  cout << "  br " << "t0" << ", " << branch.true_bb->name <<", " <<branch.false_bb->name << endl;
+  cout << endl;
+
+  cout << branch.true_bb->name << ":" << endl;
+  Visit(branch.true_bb);
+  cout << endl;
+
+  cout << branch.false_bb->name << ":" << endl;
+  Visit(branch.false_bb);
+  cout << endl;
+}
+
+void Visit(const koopa_raw_jump_t &jump, const koopa_raw_value_t &value){
+  cout << "  j " << jump.target->name <<endl; 
+  // Visit(jump.target);
+
+}
+
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
   // do nothing
   Visit(load.src);
@@ -72,8 +97,8 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   Visit(store.value);
   Visit(store.dest);
   // pure constant integer
-  cerr << store.value->kind.data.integer.value << endl;
-  cerr << offset << endl;
+  // cerr << store.value->kind.data.integer.value << endl;
+  // cerr << offset << endl;
   if(store.value->kind.tag == KOOPA_RVT_INTEGER){
     cout << "  li t0, " << store.value->kind.data.integer.value << endl;
   }else{
@@ -112,6 +137,12 @@ void Visit(const koopa_raw_value_t &value) {
         break;
       case KOOPA_RVT_STORE:
         Visit(kind.data.store, value);
+        break;
+      case KOOPA_RVT_BRANCH:
+        Visit(kind.data.branch, value);
+        break;
+      case KOOPA_RVT_JUMP:
+        Visit(kind.data.jump, value);
         break;
       default:
         assert(false);
