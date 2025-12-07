@@ -82,3 +82,37 @@ The added code is like:
   ```
 
 It give errors about the AST is empty and fail the nullptr check in the `main.cpp`. 
+
+
+## The code must within some blocks
+
+
+For example:
+
+This will work
+```c++
+            // if the condition is true, need to calculate the second block.
+            cout << trueLabel << ":"<<endl;
+            eq_exp->GenerateIR();
+            string rightVar = *(eq_exp->varName);
+            cout << "  " << cond2 << " = ne " << rightVar << ", 0" << endl;
+            cout << "  store " << cond2 << ", @" << result << endl; 
+            cout << "  jump " << endLabel << endl;
+            cout << endl;
+```
+
+This won't
+```c++
+            // if the condition is true, need to calculate the second block.
+            eq_exp->GenerateIR();
+            string rightVar = *(eq_exp->varName);
+
+            cout << trueLabel << ":"<<endl;
+            cout << "  " << cond2 << " = ne " << rightVar << ", 0" << endl;
+            cout << "  store " << cond2 << ", @" << result << endl; 
+            cout << "  jump " << endLabel << endl;
+            cout << endl;
+```
+The calculation of the temp var has been hiding between two basic blocks.
+
+
