@@ -16,6 +16,7 @@ int logic_operator_index = 0; // use for && and || for shortcut
 int local_variable_index = 0; // only increase while in a new block or function.
 int while_index = 0; // for increase when a new while block is created.
 
+stack<int> st_while; // for tracking the while_index
 
 
 StackVariable* checkIsConstant(const string& tmp);
@@ -154,6 +155,8 @@ void Block::GenerateIR() {
     // Implementation for IR generation would go here
     block_item_list->GenerateIR();
     if(block_item_list->has_return) has_return = true;
+    if(block_item_list->has_break) has_break = true;
+    if(block_item_list->has_continue) has_continue = true;
     
     // free the variable space, unique_ptr will collect the space safely.
     stack_variable_table.pop_back();
@@ -167,6 +170,14 @@ void BlockItemList::GenerateIR() {
             // early return here, if there is one block item has return then there is no need to generate other codes.
             return;
         }
+        if(block_item->has_break) {
+            has_break = true;
+            return;
+        }
+        if(block_item->has_continue) {
+            has_continue = true;
+            return;
+        }
     }
 }
 
@@ -176,6 +187,8 @@ void BlockItem::GenerateIR() {
     } else if(kind == _Stmt){
         stmt->GenerateIR();
         if(stmt->has_return) has_return = true;
+        if(stmt->has_break) has_break = true;
+        if(stmt->has_continue) has_continue = true;
     }
 }
 
@@ -203,6 +216,8 @@ void Stmt::GenerateIR() {
     } else if(kind == _Block){
         block->GenerateIR();
         if(block->has_return) has_return = true;
+        if(block->has_break) has_break = true;
+        if(block->has_continue) has_continue = true;
     } else if(kind == _If_Stmt){
         // add this line in the front in case of this is a nested if-else statement.   
         int tmp_index = if_control_index++;
@@ -214,7 +229,10 @@ void Stmt::GenerateIR() {
         ifstmt->GenerateIR();
         if(ifstmt->has_return){
             // do nothing, must have a ret 
-        }else{
+        }else if(ifstmt->has_break || ifstmt->has_continue){ 
+            // break or continue exist
+        }
+        else{
             cout << "  jump" << " \%end_" << tmp_index << endl;
         }
         cout << endl;
@@ -236,7 +254,10 @@ void Stmt::GenerateIR() {
         ifstmt->GenerateIR();
         if(ifstmt->has_return){
             // do nothing, must have a ret 
-        }else{
+        }else if(ifstmt->has_continue || ifstmt->has_break){
+            // do nothing
+        }
+        else{
             cout << "  jump" << " \%end_" << tmp_index << endl;
         }
         cout << endl;
@@ -245,6 +266,8 @@ void Stmt::GenerateIR() {
         elsestmt->GenerateIR();
         if(elsestmt->has_return){
             // do nothing, must have a ret 
+        }else if(elsestmt->has_break || elsestmt->has_continue){
+            // do nothing
         }else{
             cout << "  jump" << " \%end_" << tmp_index << endl;
         }
@@ -255,7 +278,7 @@ void Stmt::GenerateIR() {
         // the recursive situation might show up, use tep_while_index to prevent mess.
         while_index++;
         int tmp_while_index = while_index;
-        whilestmt->current_while_index = while_index;
+        st_while.push(tmp_while_index);
 
         auto while_entry_name = "\%while_entry_" + to_string(tmp_while_index);
         auto while_stmt_name = "\%while_stmt_" + to_string(tmp_while_index);
@@ -267,34 +290,43 @@ void Stmt::GenerateIR() {
         // while entry block
         cout << while_entry_name << ":" << endl;
         exp->GenerateIR();
-        cout << "  br " << *(exp->varName) << ", " << while_stmt_name;
+        cout << "  br " << *(exp->varName) << ", " << while_stmt_name << ", " << while_next_name << endl;
         cout << endl;
         
         // while stmt block
         cout <<  while_stmt_name << ":" << endl;
         whilestmt->GenerateIR();
-        cout << "  jump " << while_entry_name << endl;
-        cout << endl;
+        if(whilestmt->has_break || whilestmt->has_continue){
+            // do nohting whehn the break and continue show up.
+        }else if(whilestmt->has_return){
+            // also donothing
+        }else{
+            cout << "  jump " << while_entry_name << endl;
+            cout << endl;
+        }
 
         // next block
         cout << while_next_name << ":" <<endl;
+        st_while.pop();
 
     } else if (kind == _Break){
-        if(!current_while_index){
+        if(st_while.empty()){
             cerr << "The break; statement is not inside a while loop" << endl;
             assert(false);
         }
-        auto while_next_name = "\%while_next_" + to_string(current_while_index);
+        has_break = true;
+        auto while_next_name = "\%while_next_" + to_string(st_while.top());
 
         cout << "  jump " << while_next_name << endl;
         cout << endl;
 
     } else if (kind == _Continue){
-        if(!current_while_index){
+        if(st_while.empty()){
             cerr << "The continue; statement is not inside a while loop" << endl;
             assert(false);
         }
-        auto while_entry_name = "\%while_entry_" + to_string(current_while_index);
+        has_continue = true;
+        auto while_entry_name = "\%while_entry_" + to_string(st_while.top());
 
         cout << "  jump " << while_entry_name << endl;
         cout << endl;

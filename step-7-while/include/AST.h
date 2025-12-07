@@ -7,6 +7,7 @@
 #include <variant>
 #include <unordered_map>
 #include <unordered_set>
+#include <stack>
 #include "koopa.h"
 
 using namespace std;
@@ -51,7 +52,8 @@ class BaseAST{
     public:
     int lineno;
     bool has_return;
-    int current_while_index;
+    bool has_break;
+    bool has_continue;
     virtual ~BaseAST() = default;
 
     virtual void GenerateIR() = 0;
