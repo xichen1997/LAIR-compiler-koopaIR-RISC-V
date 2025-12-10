@@ -1,5 +1,6 @@
 #include "../include/AST.h"
 
+unordered_map<string, string> func_type_map;
 struct StackVariable{
     unordered_map<string, int> const_variable_table;
     unordered_map<string, string> initialized_variables;
@@ -8,8 +9,9 @@ struct StackVariable{
 
 vector<std::unique_ptr<StackVariable>> stack_variable_table;
 
-int temp_count = 0;
+int temp_count= 0;
 int total_variable_number = 0;
+vector<int> total_variable_number_list;
 
 int if_control_index = 0; // to differentiate different if else block.
 int logic_operator_index = 0; // use for && and || for shortcut
@@ -32,7 +34,20 @@ void CompUnit::GenerateIR() {
 
 void FuncDefList::GenerateIR() {
     for(int i = 0; i < func_defs.size(); ++i){
+        // need to clean the status table/symbol for each function IR generation.
+        while(!st_while.empty()){
+            st_while.pop();
+        }
+        stack_variable_table.resize(0);
+        while_index = 0;
+        local_variable_index = 0;
+        logic_operator_index = 0;
+        if_control_index = 0;
+        total_variable_number = 0;
+        temp_count = 0; 
         func_defs[i]->GenerateIR();
+        // store the total_variable_number in the total_variable_number_list
+        total_variable_number_list.push_back(total_variable_number);
     }
 }
 
@@ -40,9 +55,8 @@ void FuncDef::GenerateIR() {
     // Implementation for IR generation would go here
     cout << "fun @" << *ident << "(";
     if(funcfparams != nullptr){
-        funcfparams->GenerateIR();
         cout << "@" << *(funcfparams->list[0]->ident) << ": i32";
-        for(int i = 0; i < funcfparams->list.size(); ++i) {
+        for(int i = 1; i < funcfparams->list.size(); ++i) {
             cout << ", @" << *(funcfparams->list[i]->ident) << ": i32";
         }
     }
@@ -50,6 +64,18 @@ void FuncDef::GenerateIR() {
     func_type->GenerateIR();
     cout << "{\n";
     cout << "\%entry:\n";
+
+    // define function type globally
+    func_type_map[*ident] = *(func_type->functype);
+
+    // define here, need a new stack variable table
+    auto ptr = std::make_unique<StackVariable>();
+    stack_variable_table.push_back(std::move(ptr));
+
+    if(funcfparams != nullptr){
+        funcfparams->GenerateIR();
+    }
+    
     block->GenerateIR();
     if(!block->has_return) { // for the void type
         cout << "  ret" << endl;
@@ -71,10 +97,14 @@ void FuncFParams::GenerateIR(){
 }
 
 void FuncFParam::GenerateIR(){
+    StackVariable* current_variable_table_location = stack_variable_table.back().get();
     cout << "  %" << *ident << " = alloc i32" << endl;
+    current_variable_table_location->declared_variables[*ident] = *ident;
+    current_variable_table_location->initialized_variables[*ident] = *ident;
     cout << "  store @" << *ident << ", %" << *ident << endl;
-    varName =  std::make_unique<string>("\%" + to_string(temp_count++));
-    cout << "  " << *varName  << " = load %" << *ident << endl;  
+    varName = std::make_unique<string>("\%" + *ident);
+    // varName =  std::make_unique<string>("\%" + to_string(temp_count++));
+    // cout << "  " << *varName  << " = load %" << *ident << endl;  
 
 }
 void Decl::GenerateIR(){
@@ -143,7 +173,7 @@ void VarDefList::GenerateIR(){
 void VarDef::GenerateIR(){
     // Implementation for IR generation would go here
     StackVariable* current_variable_table_location = stack_variable_table.back().get();
-    cerr << "Generating IR for variable: " << *ident << endl;
+    // cerr << "Generating IR for variable: " << *ident << endl;
     if(current_variable_table_location->declared_variables.count(*ident)){
         cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
         assert(false);
@@ -420,10 +450,18 @@ void PrimaryExp::GenerateIR(){
             cerr << "Error: variable '" << *ident << "' is not initiailized" << endl;
             assert(false);
         }
-
-        // *ident is the original value, when generating IR must use the hashed value.
+        
+        // first frame in stack means the parameters.
+        StackVariable* first_variable_table_location = stack_variable_table.front().get();
+        // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
         varName = std::make_unique<string>("%" + to_string(temp_count++));
-        cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] <<endl;
+        cerr << *ident << endl;
+        if(first_variable_table_location->declared_variables.count(*ident)){
+            // %x ,etc,
+            cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] <<endl;
+        }else{
+            cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] <<endl;
+        }
     }
 }
 
@@ -469,12 +507,22 @@ void UnaryExp::GenerateIR(){
         }
     } else if(kind == _Func_No_Params){
         // call function  
-        varName = std::make_unique<string>("\%" + to_string(temp_count++));
-        cout << "  " << *varName << " = call @" << *func_name << "()";
+        if(func_type_map[*func_name] != "void"){
+            varName = std::make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *varName << " = call @" << *func_name << "()" << endl;
+        }else{
+            varName = std::make_unique<string>("[PlaceHolderForVoidFunction]"); 
+            cout << "  call @" << *func_name << "()" << endl;
+        }
     } else if(kind == _Func_With_Params){
         // call function with params
-        varName = std::make_unique<string>("\%" + to_string(temp_count++));
-        cout << "  " << *varName << " = call @" << *func_name << "(";
+        if(func_type_map[*func_name] != "void"){
+            varName = std::make_unique<string>("\%" + to_string(temp_count++));
+            cout << "  " << *varName << " = call @" << *func_name << "(";
+        }else{
+            varName = std::make_unique<string>("[PlaceHolderForVoidFunction]"); 
+            cout << "  call @" << *func_name << "(";
+        }
 
         params->GenerateIR();
         cout << *(params->list[0]->varName);

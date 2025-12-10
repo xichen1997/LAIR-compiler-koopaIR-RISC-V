@@ -2,6 +2,7 @@
 
 using namespace std;
 int offset = 0;
+extern vector<int> total_variable_number_list;
 extern int total_variable_number;
 unordered_map<koopa_raw_value_t, int> stack_offset_map;
 unordered_set<koopa_raw_value_t> visited;
@@ -173,6 +174,12 @@ void Visit(const koopa_raw_slice_t &slice) {
       auto ptr = slice.buffer[i];
       switch (slice.kind) {
         case KOOPA_RSIK_FUNCTION:
+          // clear all the status // total_variable_number should also update.
+          total_variable_number = total_variable_number_list.front();
+          total_variable_number_list.erase(total_variable_number_list.begin());
+          stack_offset_map.clear();
+          visited.clear();
+          integer_map.clear();
           Visit(reinterpret_cast<koopa_raw_function_t>(ptr));
           break;
         case KOOPA_RSIK_BASIC_BLOCK:

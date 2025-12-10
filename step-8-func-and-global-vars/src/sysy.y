@@ -102,8 +102,9 @@ FuncDef
   : FuncType IDENT '(' ')' Block {
     auto ast = new FuncDef();
     auto block = dynamic_cast<Block*>($5);
+    auto func_type = dynamic_cast<FuncType*>($1);
 
-    ast->func_type = unique_ptr<BaseAST>($1);
+    ast->func_type.reset(func_type);
     ast->ident.reset($2);
     ast->block.reset(block);
     ast->lineno = @2.first_line; 
@@ -114,8 +115,9 @@ FuncDef
     auto ast = new FuncDef();
     auto block = dynamic_cast<Block*>($6);
     auto funcfparams = dynamic_cast<FuncFParams*>($4);
+    auto func_type = dynamic_cast<FuncType*>($1);
 
-    ast->func_type.reset($1);
+    ast->func_type.reset(func_type);
     ast->ident.reset($2);
     ast->block.reset(block);
     ast->funcfparams.reset(funcfparams);
