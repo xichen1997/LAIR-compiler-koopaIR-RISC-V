@@ -91,6 +91,7 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
   LoadFromStack("t0", stack_offset_map[load.src]);
   StoreToStack("t0", stack_offset_map[value]);
 }
+
 void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   Visit(store.value);
   Visit(store.dest);
@@ -103,6 +104,16 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
     LoadFromStack("t0", stack_offset_map[store.value]);
   }
   StoreToStack("t0", stack_offset_map[store.dest]);
+}
+
+// void Visit(const koopa_raw_function_t & callee){
+//   cout << "  " << *(callee->name) << endl;
+// }
+
+void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
+  // Visit(call.callee);
+  cout << "  call " << *(call.callee->name) << endl;
+  // Visit(call.args);
 }
   
 void Visit(const koopa_raw_value_t &value) {
@@ -142,17 +153,27 @@ void Visit(const koopa_raw_value_t &value) {
       case KOOPA_RVT_JUMP:
         Visit(kind.data.jump, value);
         break;
+      case KOOPA_RVT_CALL:
+        Visit(kind.data.call, value);
+        break;
       default:
         assert(false);
     }
   }
   
 void Visit(const koopa_raw_basic_block_t &bb) { 
-  cout << printBBName(bb->name) << ":" << endl;
+  // cout << printBBName(bb->name) << ":" << endl;
   Visit(bb->insts); 
 }
   
 void Visit(const koopa_raw_function_t &func) {
+    // clean status, only keep total_varaible_number
+    total_variable_number = total_variable_number_list.front();
+    total_variable_number_list.erase(total_variable_number_list.begin());
+    stack_offset_map.clear();
+    visited.clear();
+    integer_map.clear();
+
     cout << "  .globl " << func->name + 1 << endl;  // skip the '@' character
     cout << func->name + 1 << ":" << endl;
     int sp_gap = total_variable_number;
@@ -175,11 +196,6 @@ void Visit(const koopa_raw_slice_t &slice) {
       switch (slice.kind) {
         case KOOPA_RSIK_FUNCTION:
           // clear all the status // total_variable_number should also update.
-          total_variable_number = total_variable_number_list.front();
-          total_variable_number_list.erase(total_variable_number_list.begin());
-          stack_offset_map.clear();
-          visited.clear();
-          integer_map.clear();
           Visit(reinterpret_cast<koopa_raw_function_t>(ptr));
           break;
         case KOOPA_RSIK_BASIC_BLOCK:

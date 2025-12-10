@@ -47,6 +47,8 @@ void FuncDefList::GenerateIR() {
         temp_count = 0; 
         func_defs[i]->GenerateIR();
         // store the total_variable_number in the total_variable_number_list
+        total_variable_number += temp_count;
+        cerr << total_variable_number << endl;
         total_variable_number_list.push_back(total_variable_number);
     }
 }
@@ -516,6 +518,7 @@ void UnaryExp::GenerateIR(){
         }
     } else if(kind == _Func_With_Params){
         // call function with params
+        params->GenerateIR();
         if(func_type_map[*func_name] != "void"){
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "(";
@@ -524,7 +527,6 @@ void UnaryExp::GenerateIR(){
             cout << "  call @" << *func_name << "(";
         }
 
-        params->GenerateIR();
         cout << *(params->list[0]->varName);
         for(int i = 1; i < params->list.size(); ++i) {
             cout << ", ";
