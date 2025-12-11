@@ -9,9 +9,14 @@ struct StackVariable{
 
 vector<std::unique_ptr<StackVariable>> stack_variable_table;
 
+int func_index = 0;
 int temp_count= 0;
 int total_variable_number = 0;
+int max_parameter_number = 0;
+bool is_function_called = 0;
 vector<int> total_variable_number_list;
+vector<int> max_parameter_number_list;
+vector<bool> is_function_called_list;
 
 int if_control_index = 0; // to differentiate different if else block.
 int logic_operator_index = 0; // use for && and || for shortcut
@@ -44,12 +49,18 @@ void FuncDefList::GenerateIR() {
         logic_operator_index = 0;
         if_control_index = 0;
         total_variable_number = 0;
+        max_parameter_number = 0;
+        is_function_called = false;
         temp_count = 0; 
         func_defs[i]->GenerateIR();
         // store the total_variable_number in the total_variable_number_list
+        total_variable_number += max(max_parameter_number - 8, 0); // extra callee function parameters space.
         total_variable_number += temp_count;
-        cerr << total_variable_number << endl;
+        
+        // for all the function in the translate unit
+        max_parameter_number_list.push_back(max_parameter_number);
         total_variable_number_list.push_back(total_variable_number);
+        is_function_called_list.push_back(is_function_called);
     }
 }
 
@@ -61,11 +72,12 @@ void FuncDef::GenerateIR() {
         for(int i = 1; i < funcfparams->list.size(); ++i) {
             cout << ", @" << *(funcfparams->list[i]->ident) << ": i32";
         }
+        total_variable_number += funcfparams->list.size(); // parameters temporary variables.
     }
     cout << ")";
     func_type->GenerateIR();
     cout << "{\n";
-    cout << "\%entry:\n";
+    cout << "\%entry_" << func_index++ <<":"<< endl;
 
     // define function type globally
     func_type_map[*ident] = *(func_type->functype);
@@ -183,6 +195,7 @@ void VarDef::GenerateIR(){
     // declare it here
     current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index);
 
+    // local defined vairable need to increase total_variable_number by 1;
     total_variable_number++;
 
     cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
@@ -509,6 +522,8 @@ void UnaryExp::GenerateIR(){
         }
     } else if(kind == _Func_No_Params){
         // call function  
+        // need to calculate the max_parameters_number
+        is_function_called = true;
         if(func_type_map[*func_name] != "void"){
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "()" << endl;
@@ -518,7 +533,9 @@ void UnaryExp::GenerateIR(){
         }
     } else if(kind == _Func_With_Params){
         // call function with params
+        is_function_called = true;
         params->GenerateIR();
+        max_parameter_number = max(max_parameter_number, static_cast<int>(params->list.size()));
         if(func_type_map[*func_name] != "void"){
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "(";

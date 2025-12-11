@@ -1,10 +1,14 @@
 #include "../include/Koopa2RISCV.h"
 
 using namespace std;
-int offset = 0;
+int offset = 0; // index for allocating 
 extern vector<int> total_variable_number_list;
+extern vector<int> max_parameter_number_list;
+extern vector<bool> is_function_called_list;
+extern int max_parameter_number;
 extern int total_variable_number;
-unordered_map<koopa_raw_value_t, int> stack_offset_map;
+extern bool is_function_called;
+unordered_map<koopa_raw_value_t, int> stack_offset_map; // string -> offset | index for these temporary variable
 unordered_set<koopa_raw_value_t> visited;
 unordered_map<koopa_raw_value_t, int> integer_map;
 
@@ -31,8 +35,6 @@ void StoreToStack(const std::string &reg, int offset) {
       cout << "  sw " << reg << ", " << offset << "(sp)" << endl;
   }
 }
-
-
 
 void Visit(const koopa_raw_integer_t &integer, const koopa_raw_value_t &value) {
     // do nothing, termination node
@@ -111,9 +113,35 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
 // }
 
 void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
-  // Visit(call.callee);
-  cout << "  call " << *(call.callee->name) << endl;
+  for(int i = 0; i < call.args.len; ++i){
+    koopa_raw_value_t arg = reinterpret_cast<koopa_raw_value_t>(call.args.buffer[i]);
+    if (arg->kind.tag == KOOPA_RVT_INTEGER){
+      cout << "  li t0, " << arg->kind.data.integer.value << endl;
+    }else{
+      LoadFromStack("t0", stack_offset_map[arg]);
+    }
+
+    if(i < 8){
+      string reg = "a" + to_string(i);
+      cout << "  mv "<< reg <<", t0" << endl;
+    }else{
+      int location = (i - 8) * 4;
+      StoreToStack("t0", location);
+    }
+  }
+
+  string func_name = string(call.callee->name).substr(1);
+  cout << "  call " << func_name << endl;
+
+  if(call.callee->ty->tag == KOOPA_RTT_INT32){ // there is a return value, need to store the value of the function
+    StoreToStack("a0", offset*4);
+    offset++;
+  }
   // Visit(call.args);
+}
+
+void Visit(const koopa_raw_func_arg_ref_t &func_arg_ref, const koopa_raw_value_t &value){
+  // do nothing here
 }
   
 void Visit(const koopa_raw_value_t &value) {
@@ -137,10 +165,10 @@ void Visit(const koopa_raw_value_t &value) {
         stack_offset_map[value] = offset*4; // value -> stack sp offset (of course need to * 4)
         offset++;
         break;
-      case KOOPA_RVT_UNDEF:
-        stack_offset_map[value] = offset*4;
-        offset++;
-        break;
+      // case KOOPA_RVT_UNDEF:
+      //   stack_offset_map[value] = offset*4;
+      //   offset++;
+      //   break;
       case KOOPA_RVT_LOAD:
         Visit(kind.data.load, value);
         break;
@@ -156,20 +184,33 @@ void Visit(const koopa_raw_value_t &value) {
       case KOOPA_RVT_CALL:
         Visit(kind.data.call, value);
         break;
+      case KOOPA_RVT_FUNC_ARG_REF:
+        Visit(kind.data.func_arg_ref, value);
+        break;
       default:
+        cerr << "Unhandled value tag = " << kind.tag << endl;
         assert(false);
     }
   }
   
 void Visit(const koopa_raw_basic_block_t &bb) { 
-  // cout << printBBName(bb->name) << ":" << endl;
+  cout << printBBName(bb->name) << ":" << endl;
   Visit(bb->insts); 
 }
   
 void Visit(const koopa_raw_function_t &func) {
-    // clean status, only keep total_varaible_number
+    // get the status total_varaible_number, 
+    //                max_parameter_number,
+    //                is_function_called.
     total_variable_number = total_variable_number_list.front();
+    max_parameter_number = max_parameter_number_list.front();
+    is_function_called = is_function_called_list.front();
     total_variable_number_list.erase(total_variable_number_list.begin());
+    max_parameter_number_list.erase(total_variable_number_list.begin());
+    is_function_called_list.erase(is_function_called_list.begin());
+
+    // offset means the start position to arrange the temporary variables
+    offset = max(max_parameter_number - 8,0);
     stack_offset_map.clear();
     visited.clear();
     integer_map.clear();
@@ -186,8 +227,15 @@ void Visit(const koopa_raw_function_t &func) {
     }else{
       cout << "  addi sp, sp, " << -sp_gap << endl;
     }
+
+    // check if the func will call other func, if yes then consider store ra value.
+    if(is_function_called){
+      cout << "  sw ra, " << sp_gap - 4 << "(sp)" << endl;
+    }
+
+    // This will do the koopaIR stuff. The parameters initialization is also included
     Visit(func->bbs);
-   
+
   }
   
 void Visit(const koopa_raw_slice_t &slice) {
