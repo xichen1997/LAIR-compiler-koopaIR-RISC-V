@@ -52,16 +52,27 @@ void CompUnit::GenerateIR() {
     func_type_map["putch"]     = "void";
     func_type_map["putarray"]  = "void";
     func_type_map["starttime"] = "void";
-    func_type_map["starttime"] = "void";
+    func_type_map["stoptime"] = "void";
+
+    // for(int i = 0; i < 8; ++i){
+    //     total_variable_number_list.push_back(0);
+    //     max_parameter_number_list.push_back(0);
+    //     is_function_called_list.push_back(0);
+    // }
 
     cout << endl;
-    func_def_list->GenerateIR();
-
-
+    // add the function def manually.
+    comp_unit_list->GenerateIR();
 }
 
-void FuncDefList::GenerateIR() {
-    for(int i = 0; i < func_defs.size(); ++i){
+void CompUnitList::GenerateIR() {
+    for(int i = 0; i < list.size(); ++i){
+        list[i]->GenerateIR();
+    }
+}
+
+void CompUnitItem::GenerateIR() {
+    if(kind == _FuncDef) {
         // need to clean the status table/symbol for each function IR generation.
         while(!st_while.empty()){
             st_while.pop();
@@ -75,7 +86,8 @@ void FuncDefList::GenerateIR() {
         max_parameter_number = 0;
         is_function_called = false;
         temp_count = 0; 
-        func_defs[i]->GenerateIR();
+        func_def->GenerateIR();
+        // For generating RSIC-V code.
         // store the total_variable_number in the total_variable_number_list
         total_variable_number += max(max_parameter_number - 8, 0); // extra callee function parameters space.
         total_variable_number += temp_count;
@@ -84,6 +96,8 @@ void FuncDefList::GenerateIR() {
         max_parameter_number_list.push_back(max_parameter_number);
         total_variable_number_list.push_back(total_variable_number);
         is_function_called_list.push_back(is_function_called);
+    }else{
+        decl->GenerateIR();
     }
 }
 

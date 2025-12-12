@@ -233,6 +233,9 @@ void Visit(const koopa_raw_basic_block_t &bb) {
 }
   
 void Visit(const koopa_raw_function_t &func) {
+    if(func->bbs.len == 0) {
+      return;
+    }
     // get the status total_variable_number, 
     //                max_parameter_number,
     //                is_function_called.

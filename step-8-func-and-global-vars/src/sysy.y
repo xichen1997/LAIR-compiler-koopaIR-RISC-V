@@ -52,11 +52,11 @@ using namespace std;
 %token <int_val> INT_CONST 
 
 // 非终结符的类型定义
-%type <ast_val> Block BlockItemList BlockItem Stmt Number
+%type <ast_val> Block BlockItemList BlockItem Stmt Number CompUnitItem CompUnitList
 // 定义运算相关
 %type <ast_val> Decl FuncDef Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
 // 定义变量常量
-%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal VarDecl VarDefList VarDef InitVal FuncFParams FuncFParam FuncRParams FuncDefList
+%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal VarDecl VarDefList VarDef InitVal FuncFParams FuncFParam FuncRParams
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
 %type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp LVAL BType
 
@@ -66,35 +66,51 @@ using namespace std;
 
 %%
 // 把所有的东西都放到类里面，用unique pointer 管理各个ast。
+
 CompUnit
-  : FuncDefList{
+  : CompUnitList {
     auto comp_unit = make_unique<CompUnit>();
-    auto fdl = static_cast<FuncDefList*>($1);
-    comp_unit->func_def_list.reset(fdl);
-    comp_unit->lineno = @1.first_line;
+    auto cul = dynamic_cast<CompUnitList*>($1);
+    comp_unit->comp_unit_list.reset(cul);
     ast = std::move(comp_unit);
-    // cerr << "[AST] Built CompUnit at line " << @1.first_line << endl;
+    cerr << "[AST] Built CompUnit at line " << @1.first_line << endl;
+  }
+
+CompUnitList
+  : CompUnitItem {
+    auto ast = new CompUnitList();
+    auto cui = dynamic_cast<CompUnitItem*>($1);
+    ast->list.emplace_back(cui);
+    $$ = ast;
+    cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
+  }
+  | CompUnitList CompUnitItem {
+    auto cul = dynamic_cast<CompUnitList*>($1);
+    auto cui = dynamic_cast<CompUnitItem*>($2);
+    cul->list.emplace_back(cui);
+    $$ = cul;
+    cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
   }
   ;
 
-FuncDefList
+CompUnitItem
   : FuncDef {
-    auto func_def = dynamic_cast<FuncDef*>($1);
-    auto ast = new FuncDefList();
-    ast->func_defs.emplace_back(func_def);
-    // cerr << ast->func_defs.size() << endl;
+    auto ast = new CompUnitItem();
+    auto fdl = dynamic_cast<FuncDef*>($1);
+    ast->func_def.reset(fdl);
     ast->lineno = @1.first_line;
+    ast->kind = CompUnitItem::_FuncDef;
     $$ = ast;
-    // cerr << "[AST] Built FuncDefList at line " << @1.first_line << endl;
-  } 
-  | FuncDefList FuncDef{
-    auto func_def = dynamic_cast<FuncDef*>($2);
-    auto ast = dynamic_cast<FuncDefList*>($1);
-    ast->func_defs.emplace_back(func_def);
-    // cerr << ast->func_defs.size() << endl;
-    ast->lineno = @2.first_line;
+    cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
+  }
+  | Decl {
+    auto ast = new CompUnitItem();
+    auto d = dynamic_cast<Decl*>($1);
+    ast->decl.reset(d);
+    ast->lineno = @1.first_line;
+    ast->kind = CompUnitItem::_Decl;
     $$ = ast;
-    // cerr << "[AST] Built FuncDefList at line " << @1.first_line << endl;
+    cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
   }
   ;
 

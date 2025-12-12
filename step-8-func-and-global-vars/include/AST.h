@@ -20,6 +20,8 @@ extern vector<int> total_variable_number_list;
 
 class BaseAST;
 class CompUnit;
+class CompUnitList;
+class CompUnitItem;
 class FuncDef;
 class FuncType;
 class FuncFParam;
@@ -65,20 +67,32 @@ class BaseAST{
 
 class CompUnit : public BaseAST{
     public:
-    std::unique_ptr<FuncDefList> func_def_list;
+    std::unique_ptr<CompUnitList> comp_unit_list;
 
     void GenerateIR() override;
 };
 // varName used for generating RISCV code.
 // other used for generating AST koopa IR.
 
-
-class FuncDefList : public BaseAST {
+class CompUnitList : public BaseAST {
     public:
-    std::vector<std::unique_ptr<FuncDef>> func_defs;
+    std::vector<std::unique_ptr<CompUnitItem>> list;
 
     void GenerateIR() override;
 };
+
+class CompUnitItem : public BaseAST {
+    public:
+    enum Kind{
+        _FuncDef,
+        _Decl
+    } kind;
+    std::unique_ptr<FuncDef> func_def;
+    std::unique_ptr<Decl> decl;
+
+    void GenerateIR() override;
+};
+
 
 class FuncDef : public BaseAST{
     public:
