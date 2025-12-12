@@ -62,6 +62,12 @@ void CompUnit::GenerateIR() {
 
     cout << endl;
     // add the function def manually.
+
+    // for store the global variable definition.
+    // keep the size = 1 at the beginning for global declaration.
+    auto ptr = make_unique<StackVariable>();
+    stack_variable_table.push_back(std::move(ptr));
+
     comp_unit_list->GenerateIR();
 }
 
@@ -77,7 +83,8 @@ void CompUnitItem::GenerateIR() {
         while(!st_while.empty()){
             st_while.pop();
         }
-        stack_variable_table.resize(0);
+        // stack_variable_table.resize(1);
+        // clear count index
         while_index = 0;
         local_variable_index = 0;
         logic_operator_index = 0;
@@ -120,7 +127,7 @@ void FuncDef::GenerateIR() {
     // define function type globally
     func_type_map[*ident] = *(func_type->functype);
 
-    // define here, need a new stack variable table
+    // define here, need a new stack variable table for parameters 
     auto ptr = std::make_unique<StackVariable>();
     stack_variable_table.push_back(std::move(ptr));
 
@@ -133,6 +140,9 @@ void FuncDef::GenerateIR() {
         cout << "  ret" << endl;
     }
     cout << "}\n";
+
+    // need to pop out the stack_variable_table
+    stack_variable_table.pop_back();
 }
 
 void FuncRParams::GenerateIR() {
@@ -224,6 +234,27 @@ void VarDefList::GenerateIR(){
 }
 
 void VarDef::GenerateIR(){
+    // Need to seperate global declaration.
+    if(stack_variable_table.size() == 1){
+        StackVariable* current_variable_table_location = stack_variable_table.back().get();
+        if(current_variable_table_location->declared_variables.count(*ident)){
+            cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
+            assert(false);
+        }
+        // use the name directly as the name of the global var
+        current_variable_table_location->declared_variables[*ident] = *ident; 
+        if(init_val){
+            init_val->GenerateIR();
+            string tmp = *(init_val->varName);
+            cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
+            current_variable_table_location->initialized_variables[*ident] = *ident;
+        }else{
+            cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
+            current_variable_table_location->initialized_variables[*ident] = *ident;
+        }
+        return;
+    }
+
     // Implementation for IR generation would go here
     StackVariable* current_variable_table_location = stack_variable_table.back().get();
     // cerr << "Generating IR for variable: " << *ident << endl;
@@ -506,10 +537,9 @@ void PrimaryExp::GenerateIR(){
         }
         
         // first frame in stack means the parameters.
-        StackVariable* first_variable_table_location = stack_variable_table.front().get();
+        StackVariable* first_variable_table_location = stack_variable_table[1].get();
         // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
         varName = std::make_unique<string>("%" + to_string(temp_count++));
-        cerr << *ident << endl;
         if(first_variable_table_location->declared_variables.count(*ident)){
             // %x ,etc,
             cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] <<endl;
@@ -576,7 +606,6 @@ void UnaryExp::GenerateIR(){
         params->GenerateIR();
         max_parameter_number = max(max_parameter_number, static_cast<int>(params->list.size()));
         if(func_type_map[*func_name] != "void"){
-            cerr << *func_name  << endl;
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "(";
         }else{

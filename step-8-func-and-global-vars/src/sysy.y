@@ -75,6 +75,7 @@ CompUnit
     ast = std::move(comp_unit);
     cerr << "[AST] Built CompUnit at line " << @1.first_line << endl;
   }
+  ;
 
 CompUnitList
   : CompUnitItem {

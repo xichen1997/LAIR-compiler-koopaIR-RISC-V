@@ -73,6 +73,25 @@ void Visit(const koopa_raw_return_t &ret) {
   cout << endl;
 }
 
+void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t &value){
+  cout << "  .data" << endl;
+  string tmp(value->name);
+  tmp = tmp.substr(1);
+  cerr << tmp << endl;
+  cout << tmp << ":" << endl;
+  auto t = global_alloc.init->kind.tag;
+  if(t == KOOPA_RVT_INTEGER){
+    cout << "  .word " << global_alloc.init->kind.data.integer.value << endl;
+  }else if(t == KOOPA_RVT_ZERO_INIT){
+    cout << "  .zero 4" << endl;
+  }else{
+    cerr << "Error: the global var allocation data is either KOOPA_RVT_INTEGER or KOOPA_RVT_ZERO_INIT" << endl;
+    assert(false);
+  }
+  cout << endl;
+}
+
+
 void Visit(const koopa_raw_branch_t &branch, const koopa_raw_value_t &value){
   Visit(branch.cond);
   if(branch.cond->kind.tag == KOOPA_RVT_INTEGER){
@@ -92,7 +111,16 @@ void Visit(const koopa_raw_jump_t &jump, const koopa_raw_value_t &value){
 }
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
-  // do nothing
+  // check if this is global allocate, if yes then we don't need to generate the initialization again.
+  if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
+    // need to load from the global definition area.
+    string tmp(load.src->name);
+    tmp = tmp.substr(1);
+    cout << "  la t0, " << tmp << endl;
+    cout << "  lw t0, 0(t0)" << endl;
+    StoreToStack("t0", stack_offset_map[value]);
+    return;
+  }
   Visit(load.src);
   stack_offset_map[value] = offset*4;
   offset++;
@@ -102,7 +130,11 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
 
 void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   Visit(store.value);
-  Visit(store.dest);
+  
+  // handle global variable, global var shouldn't visit
+  if(store.dest->kind.tag != KOOPA_RVT_GLOBAL_ALLOC){
+    Visit(store.dest);
+  }
   // pure constant integer
   // cerr << store.value->kind.data.integer.value << endl;
   // cerr << offset << endl;
@@ -133,7 +165,15 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   }else{
     LoadFromStack("t0", stack_offset_map[store.value]);
   }
-  StoreToStack("t0", stack_offset_map[store.dest]);
+  if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
+    string tmp(store.dest->name);
+    tmp = tmp.substr(1);
+    cout << "  la t0, " << tmp << endl; 
+    LoadFromStack("t1", stack_offset_map[store.value]);
+    cout << "  sw t1, 0(t0)" << endl;
+  }else{
+    StoreToStack("t0", stack_offset_map[store.dest]);
+  }
 }
 
 // void Visit(const koopa_raw_function_t & callee){
@@ -221,6 +261,9 @@ void Visit(const koopa_raw_value_t &value) {
       case KOOPA_RVT_FUNC_ARG_REF:
         Visit(kind.data.func_arg_ref, value);
         break;
+      case KOOPA_RVT_GLOBAL_ALLOC:
+        Visit(kind.data.global_alloc, value);
+        break;
       default:
         cerr << "Unhandled value tag = " << kind.tag << endl;
         assert(false);
@@ -251,9 +294,6 @@ void Visit(const koopa_raw_function_t &func) {
     total_variable_number = func_total_vars_map[funcName];
     max_parameter_number = func_max_params_map[funcName];
     is_function_called = func_is_called_map[funcName];
-    cerr << endl;
-    cerr << total_variable_number << endl;
-    cerr << endl;
 
     // offset means the start position to arrange the temporary variables
     offset = max(max_parameter_number - 8,0);
@@ -319,8 +359,12 @@ void Visit(const koopa_raw_slice_t &slice) {
   }
   
 void Visit(const koopa_raw_program_t &program) {
+    // Visit(program.values);
+    for(int i = 0; i < program.values.len; ++i){
+      koopa_raw_value_t var = reinterpret_cast<koopa_raw_value_t>(program.values.buffer[i]);
+      Visit(var);
+    }
     cout << "  .text" << endl;
-    Visit(program.values);
     Visit(program.funcs);
   }
   

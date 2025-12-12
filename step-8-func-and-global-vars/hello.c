@@ -1,21 +1,25 @@
-int add(int a, int b) {
-  return a + b;
+int a = 10;
+
+int inc() {
+  a = a + 1;
+  return a;
 }
 
-int sub(int a, int b) {
-  return a - b;
-}
-
-int mul(int a, int b) {
-  return a * b;
-}
-
-int div(int a, int b) {
-  return a / b;
+void print_a() {
+  putint(a);
+  putch(10);
 }
 
 int main() {
-  int x = add(sub(1, 2), mul(3, div(4, 5)));
-  int y = add(1 || 0, 0 && sub(1, x) || mul(3, div(x || add(1, 2) > 10, 5)));
-  return x + y;
+  int i = 0;
+  while (i < 10) {
+    inc();
+    int a = 1;
+    a = a + 2;
+    putint(a);
+    putch(10);
+    print_a();
+    i = i + 1;
+  }
+  return 0;
 }
