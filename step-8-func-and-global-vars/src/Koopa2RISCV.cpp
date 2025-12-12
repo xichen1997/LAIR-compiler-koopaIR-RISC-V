@@ -117,10 +117,14 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   // need to add current stack frame size and the offset.
   // if they have same name like %x = @x, which is loading the parameters, we should compare and add
   // a gap, which is the current total_variable_number.
-  string a((store.value->name));
-  string b((store.dest->name));
-  if(a.substr(1) == b.substr(1)){
-    stack_offset_map[store.value] = total_variable_number + stack_offset_map[store.value];
+  // 
+  // check exist before use. sometimes the store value is a integer without name.
+  if(store.value->name && store.dest->name){
+    string a((store.value->name));
+    string b((store.dest->name));
+    if(a.substr(1) == b.substr(1)){
+      stack_offset_map[store.value] = total_variable_number + stack_offset_map[store.value];
+    }
   }
 
   // normal store command
@@ -236,7 +240,7 @@ void Visit(const koopa_raw_function_t &func) {
     max_parameter_number = max_parameter_number_list.front();
     is_function_called = is_function_called_list.front();
     total_variable_number_list.erase(total_variable_number_list.begin());
-    max_parameter_number_list.erase(total_variable_number_list.begin());
+    max_parameter_number_list.erase(max_parameter_number_list.begin());
     is_function_called_list.erase(is_function_called_list.begin());
 
     // offset means the start position to arrange the temporary variables
@@ -257,7 +261,7 @@ void Visit(const koopa_raw_function_t &func) {
     // params
     for(int i = 0; i < func->params.len; ++i){
       // need to prepare parameters
-      // Visit(reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i]));
+      Visit(reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i]));
       if(i < 8) {
         stack_offset_map[reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i])] = -i - 1;
       }else{
