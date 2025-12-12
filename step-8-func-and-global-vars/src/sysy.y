@@ -54,7 +54,7 @@ using namespace std;
 // 非终结符的类型定义
 %type <ast_val> Block BlockItemList BlockItem Stmt Number
 // 定义运算相关
-%type <ast_val> Decl FuncDef FuncType Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
+%type <ast_val> Decl FuncDef Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
 // 定义变量常量
 %type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal VarDecl VarDefList VarDef InitVal FuncFParams FuncFParam FuncRParams FuncDefList
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
@@ -99,10 +99,13 @@ FuncDefList
   ;
 
 FuncDef
-  : FuncType IDENT '(' ')' Block {
+  : BType IDENT '(' ')' Block {
     auto ast = new FuncDef();
     auto block = dynamic_cast<Block*>($5);
-    auto func_type = dynamic_cast<FuncType*>($1);
+
+    // 手动构建 FuncType AST 节点，因为 BType 返回的是 string*
+    auto func_type = new FuncType();
+    func_type->functype = make_unique<string>("int"); // $1 是 BType 返回的 string*
 
     ast->func_type.reset(func_type);
     ast->ident.reset($2);
@@ -111,11 +114,46 @@ FuncDef
     $$ = ast; 
     // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
   }
-  | FuncType IDENT '(' FuncFParams ')' Block{
+  | BType IDENT '(' FuncFParams ')' Block{
     auto ast = new FuncDef();
     auto block = dynamic_cast<Block*>($6);
     auto funcfparams = dynamic_cast<FuncFParams*>($4);
-    auto func_type = dynamic_cast<FuncType*>($1);
+
+    // 手动构建 FuncType AST 节点，因为 BType 返回的是 string*
+    auto func_type = new FuncType();
+    func_type->functype = make_unique<string>("int"); // $1 是 BType 返回的 string*
+
+    ast->func_type.reset(func_type);
+    ast->ident.reset($2);
+    ast->block.reset(block);
+    ast->funcfparams.reset(funcfparams);
+    ast->lineno = @2.first_line; 
+    $$ = ast; 
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+  }
+  | VOID IDENT '(' ')' Block {
+    auto ast = new FuncDef();
+    auto block = dynamic_cast<Block*>($5);
+
+    // 手动构建 FuncType AST 节点，因为 BType 返回的是 string*
+    auto func_type = new FuncType();
+    func_type->functype = make_unique<string>("void"); // $1 是 BType 返回的 string*
+
+    ast->func_type.reset(func_type);
+    ast->ident.reset($2);
+    ast->block.reset(block);
+    ast->lineno = @2.first_line; 
+    $$ = ast; 
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+  }
+  | VOID IDENT '(' FuncFParams ')' Block{
+    auto ast = new FuncDef();
+    auto block = dynamic_cast<Block*>($6);
+    auto funcfparams = dynamic_cast<FuncFParams*>($4);
+
+    // 手动构建 FuncType AST 节点，因为 BType 返回的是 string*
+    auto func_type = new FuncType();
+    func_type->functype = make_unique<string>("void");// $1 是 BType 返回的 string*
 
     ast->func_type.reset(func_type);
     ast->ident.reset($2);
@@ -128,22 +166,22 @@ FuncDef
   ;
 
 // 同上, 不再解释
-FuncType
-  : INT {
-    auto ast = new FuncType();
-    ast->functype = make_unique<string>("int");
-    ast->lineno = @1.first_line; 
-    $$ = ast;
-    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
-  }
-  | VOID {
-    auto ast = new FuncType();
-    ast->functype = make_unique<string>("void");
-    ast->lineno = @1.first_line;
-    $$ = ast;
-    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
-  }
-  ;
+// FuncType
+//  : INT {
+//    auto ast = new FuncType();
+//    ast->functype = make_unique<string>("int");
+//    ast->lineno = @1.first_line; 
+//    $$ = ast;
+//    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
+//  }
+//  | VOID {
+//    auto ast = new FuncType();
+//    ast->functype = make_unique<string>("void");
+//    ast->lineno = @1.first_line;
+//    $$ = ast;
+//    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
+//  }
+//  ;
 
 BType
   : INT{
