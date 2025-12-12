@@ -2,9 +2,9 @@
 
 using namespace std;
 int offset = 0; // index for allocating 
-extern vector<int> total_variable_number_list;
-extern vector<int> max_parameter_number_list;
-extern vector<bool> is_function_called_list;
+extern std::unordered_map<std::string, int> func_total_vars_map;
+extern std::unordered_map<std::string, int> func_max_params_map;
+extern std::unordered_map<std::string, bool> func_is_called_map;
 extern int max_parameter_number;
 extern int total_variable_number;
 extern bool is_function_called;
@@ -108,7 +108,7 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   // cerr << offset << endl;
 
   // for loading parameters from registers
-  if(stack_offset_map[store.value] < 0) { // load from register
+  if(stack_offset_map.count(store.value) && stack_offset_map[store.value] < 0) { // load from register
     StoreToStack("a" + to_string(- stack_offset_map[store.value] - 1), stack_offset_map[store.dest]);
     return;
   }
@@ -119,13 +119,13 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   // a gap, which is the current total_variable_number.
   // 
   // check exist before use. sometimes the store value is a integer without name.
-  if(store.value->name && store.dest->name){
-    string a((store.value->name));
-    string b((store.dest->name));
-    if(a.substr(1) == b.substr(1)){
-      stack_offset_map[store.value] = total_variable_number + stack_offset_map[store.value];
-    }
-  }
+  // if(store.value->name && store.dest->name){
+  //   string a((store.value->name));
+  //   string b((store.dest->name));
+  //   if(a.substr(1) == b.substr(1)){
+  //     stack_offset_map[store.value] = total_variable_number + stack_offset_map[store.value];
+  //   }
+  // }
 
   // normal store command
   if(store.value->kind.tag == KOOPA_RVT_INTEGER){
@@ -166,7 +166,7 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
   cout << "  call " << func_name << endl;
 
   // if function is void type, then there is no return value
-  if(call.callee->ty->tag == KOOPA_RTT_INT32){
+  if(value->ty->tag != KOOPA_RTT_UNIT){
     stack_offset_map[value] = offset*4;
     offset++;
     StoreToStack("a0", stack_offset_map[value]);
@@ -233,18 +233,27 @@ void Visit(const koopa_raw_basic_block_t &bb) {
 }
   
 void Visit(const koopa_raw_function_t &func) {
-    if(func->bbs.len == 0) {
-      return;
+      // 1. 必须跳过声明，防止重复定义符号
+      if (func->bbs.len == 0) {
+        return;
+      }
+
+    // 2. 获取函数名（去掉 Koopa IR 中的 @ 前缀）
+    string funcName = string(func->name).substr(1);
+
+    // 3. 直接从 Map 中查找数据，不需要 pop/erase，完全不需要担心顺序
+    if (func_total_vars_map.find(funcName) == func_total_vars_map.end()) {
+        // 防御性编程：如果找不到，说明 AST 阶段漏了，或者名字对不上
+        cerr << "Error: Metadata not found for function " << funcName << endl;
+        return; 
     }
-    // get the status total_variable_number, 
-    //                max_parameter_number,
-    //                is_function_called.
-    total_variable_number = total_variable_number_list.front();
-    max_parameter_number = max_parameter_number_list.front();
-    is_function_called = is_function_called_list.front();
-    total_variable_number_list.erase(total_variable_number_list.begin());
-    max_parameter_number_list.erase(max_parameter_number_list.begin());
-    is_function_called_list.erase(is_function_called_list.begin());
+
+    total_variable_number = func_total_vars_map[funcName];
+    max_parameter_number = func_max_params_map[funcName];
+    is_function_called = func_is_called_map[funcName];
+    cerr << endl;
+    cerr << total_variable_number << endl;
+    cerr << endl;
 
     // offset means the start position to arrange the temporary variables
     offset = max(max_parameter_number - 8,0);

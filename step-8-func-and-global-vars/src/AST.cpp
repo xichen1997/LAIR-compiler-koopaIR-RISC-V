@@ -14,9 +14,9 @@ int temp_count= 0;
 int total_variable_number = 0;
 int max_parameter_number = 0;
 bool is_function_called = 0;
-vector<int> total_variable_number_list;
-vector<int> max_parameter_number_list;
-vector<bool> is_function_called_list;
+std::unordered_map<std::string, int> func_total_vars_map;
+std::unordered_map<std::string, int> func_max_params_map;
+std::unordered_map<std::string, bool> func_is_called_map;
 
 int if_control_index = 0; // to differentiate different if else block.
 int logic_operator_index = 0; // use for && and || for shortcut
@@ -93,9 +93,10 @@ void CompUnitItem::GenerateIR() {
         total_variable_number += temp_count;
         
         // for all the function in the translate unit
-        max_parameter_number_list.push_back(max_parameter_number);
-        total_variable_number_list.push_back(total_variable_number);
-        is_function_called_list.push_back(is_function_called);
+        string funcName = *(func_def->ident); // 获取函数名，如 "main"
+        func_total_vars_map[funcName] = total_variable_number;
+        func_max_params_map[funcName] = max_parameter_number;
+        func_is_called_map[funcName] = is_function_called;
     }else{
         decl->GenerateIR();
     }
@@ -148,6 +149,7 @@ void FuncFParams::GenerateIR(){
 }
 
 void FuncFParam::GenerateIR(){
+    total_variable_number++; // still need to add one because we apply for a new temporary vairable.
     StackVariable* current_variable_table_location = stack_variable_table.back().get();
     cout << "  %" << *ident << " = alloc i32" << endl;
     current_variable_table_location->declared_variables[*ident] = *ident;
@@ -561,7 +563,7 @@ void UnaryExp::GenerateIR(){
         // call function  
         // need to calculate the max_parameters_number
         is_function_called = true;
-        if(func_type_map[*func_name] != "void"){
+        if(func_type_map[*func_name] == "int"){
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "()" << endl;
         }else{
@@ -822,6 +824,9 @@ void LAndExp::GenerateIR(){
         varName = make_unique<string>(*(eq_exp->varName));
     }else if(kind == _LAndExp_LAndOp_EqExp){
         // increase the index 
+        total_variable_number++;
+        total_variable_number++;
+        total_variable_number++;
         logic_operator_index++;
 
         if(land_op->compare("&&") == 0){
@@ -900,6 +905,9 @@ void LOrExp::GenerateIR(){
     }else if(kind == _LOrExp_LOrOp_LAndExp){
         // increase index
         logic_operator_index++;
+        total_variable_number++;
+        total_variable_number++;
+        total_variable_number++;
         if(lor_op->compare("||") == 0){
             // naming for variables
             auto endLabel = "\%logic_end_" + to_string(logic_operator_index);
