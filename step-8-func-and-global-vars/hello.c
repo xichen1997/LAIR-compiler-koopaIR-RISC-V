@@ -3,5 +3,6 @@ int f() {
 }
 
 int main() {
+  putch(2);
   return f();
 }

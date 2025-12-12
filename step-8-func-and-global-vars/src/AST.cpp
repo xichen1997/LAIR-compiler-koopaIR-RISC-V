@@ -34,7 +34,30 @@ using namespace std;
 
 void CompUnit::GenerateIR() {
     // Implementation for IR generation would go here
+    cout << "decl @getint(): i32" << endl;
+    cout << "decl @getch(): i32" << endl;
+    cout << "decl @getarray(*i32): i32" << endl;
+    cout << "decl @putint(i32)" << endl;
+    cout << "decl @putch(i32)" << endl;
+    cout << "decl @putarray(i32, *i32)" << endl;
+    cout << "decl @starttime()" << endl;
+    cout << "decl @stoptime()" << endl;
+    cout << endl;
+    cout << endl;
+    // establish func_type_map
+    func_type_map["getint"]    = "int";
+    func_type_map["getch"]     = "int";
+    func_type_map["getarray"]  = "int";
+    func_type_map["putint"]    = "void";
+    func_type_map["putch"]     = "void";
+    func_type_map["putarray"]  = "void";
+    func_type_map["starttime"] = "void";
+    func_type_map["starttime"] = "void";
+
+    cout << endl;
     func_def_list->GenerateIR();
+
+
 }
 
 void FuncDefList::GenerateIR() {
@@ -537,6 +560,7 @@ void UnaryExp::GenerateIR(){
         params->GenerateIR();
         max_parameter_number = max(max_parameter_number, static_cast<int>(params->list.size()));
         if(func_type_map[*func_name] != "void"){
+            cerr << *func_name  << endl;
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "(";
         }else{
