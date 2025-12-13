@@ -1,25 +1,35 @@
-int a = 10;
+int x, y;
 
-int inc() {
-  a = a + 1;
-  return a;
+int t() {
+  x = x + 1;
+  return 1;
 }
 
-void print_a() {
-  putint(a);
-  putch(10);
+int f() {
+  y = y + 1;
+  return 0;
 }
 
 int main() {
-  int i = 0;
-  while (i < 10) {
-    inc();
-    int a = 1;
-    a = a + 2;
-    putint(a);
-    putch(10);
-    print_a();
-    i = i + 1;
-  }
-  return 0;
+  int sum = 0;
+  sum = sum + (f() || f());
+  sum = sum + (f() || t());
+  sum = sum + (t() || f());
+  sum = sum + (t() || t());
+  sum = sum + (f() && f());
+  sum = sum + (f() && t());
+  sum = sum + (t() && f());
+  sum = sum + (t() && t());
+  t() || t() && t();
+  f() || t() && t();
+  f() || f() && t();
+  t() && t() || t();
+  f() && t() || t();
+  f() && f() || f();
+  putint(x);
+  putch(32);
+  putint(y);
+  putch(10);
+  putint(sum);
+  return sum;
 }

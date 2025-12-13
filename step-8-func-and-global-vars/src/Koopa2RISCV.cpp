@@ -77,7 +77,6 @@ void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t
   cout << "  .data" << endl;
   string tmp(value->name);
   tmp = tmp.substr(1);
-  cerr << tmp << endl;
   cout << tmp << ":" << endl;
   auto t = global_alloc.init->kind.tag;
   if(t == KOOPA_RVT_INTEGER){
@@ -122,8 +121,6 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
     return;
   }
   Visit(load.src);
-  stack_offset_map[value] = offset*4;
-  offset++;
   LoadFromStack("t0", stack_offset_map[load.src]);
   StoreToStack("t0", stack_offset_map[value]);
 }
@@ -132,6 +129,7 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   Visit(store.value);
   
   // handle global variable, global var shouldn't visit
+  // visit twice will generate extra definition for global var
   if(store.dest->kind.tag != KOOPA_RVT_GLOBAL_ALLOC){
     Visit(store.dest);
   }
@@ -165,12 +163,13 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
   }else{
     LoadFromStack("t0", stack_offset_map[store.value]);
   }
+
+  // if store dest is a global alloc, we should read the address
   if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
-    string tmp(store.dest->name);
+    string tmp((store.dest->name));
     tmp = tmp.substr(1);
-    cout << "  la t0, " << tmp << endl; 
-    LoadFromStack("t1", stack_offset_map[store.value]);
-    cout << "  sw t1, 0(t0)" << endl;
+    cout << "  la t1, " << tmp << endl; 
+    cout << "  sw t0, 0(t1)" << endl;
   }else{
     StoreToStack("t0", stack_offset_map[store.dest]);
   }
@@ -244,6 +243,8 @@ void Visit(const koopa_raw_value_t &value) {
       //   offset++;
       //   break;
       case KOOPA_RVT_LOAD:
+        stack_offset_map[value] = offset*4;
+        offset++;
         Visit(kind.data.load, value);
         break;
       case KOOPA_RVT_STORE:
@@ -302,8 +303,8 @@ void Visit(const koopa_raw_function_t &func) {
     //integer_map.clear();
 
 
-    cout << "  .globl " << func->name + 1 << endl;  // skip the '@' character
-    cout << func->name + 1 << ":" << endl;
+    cout << "  .globl " << funcName << endl;  // skip the '@' character
+    cout << funcName << ":" << endl;
     int sp_gap = total_variable_number;
     sp_gap = sp_gap * 4;
     sp_gap = (sp_gap + 15) / 16 * 16;
@@ -335,7 +336,6 @@ void Visit(const koopa_raw_function_t &func) {
 
     // This will do the koopaIR stuff. The parameters initialization is also included
     Visit(func->bbs);
-
   }
   
 void Visit(const koopa_raw_slice_t &slice) {

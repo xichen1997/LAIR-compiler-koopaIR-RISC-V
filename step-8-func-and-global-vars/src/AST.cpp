@@ -7,6 +7,8 @@ struct StackVariable{
     unordered_map<string, string> declared_variables;
 } stackVariable;
 
+bool is_defining_global_var = false;
+
 vector<std::unique_ptr<StackVariable>> stack_variable_table;
 
 int func_index = 0;
@@ -105,7 +107,9 @@ void CompUnitItem::GenerateIR() {
         func_max_params_map[funcName] = max_parameter_number;
         func_is_called_map[funcName] = is_function_called;
     }else{
+        is_defining_global_var = true;
         decl->GenerateIR();
+        is_defining_global_var = false;
     }
 }
 
@@ -235,7 +239,7 @@ void VarDefList::GenerateIR(){
 
 void VarDef::GenerateIR(){
     // Need to seperate global declaration.
-    if(stack_variable_table.size() == 1){
+    if(is_defining_global_var){
         StackVariable* current_variable_table_location = stack_variable_table.back().get();
         if(current_variable_table_location->declared_variables.count(*ident)){
             cerr << "Error: Redefinition of variable " << *ident << " at line " << lineno << endl;
@@ -856,16 +860,16 @@ void LAndExp::GenerateIR(){
         total_variable_number++;
         total_variable_number++;
         total_variable_number++;
-        logic_operator_index++;
+        int id = logic_operator_index++;
 
         if(land_op->compare("&&") == 0){
             // naming for variables
-            auto endLabel = "\%logic_end_" + to_string(logic_operator_index);
-            auto falseLabel = "\%logic_false_" + to_string(logic_operator_index);
-            auto trueLabel = "\%logic_true_" + to_string(logic_operator_index);
-            auto cond1 = "\%cond_l" + to_string(logic_operator_index);
-            auto cond2 = "\%cond_r" + to_string(logic_operator_index);
-            auto result = "result" + to_string(logic_operator_index);
+            auto endLabel = "\%logic_end_" + to_string(id);
+            auto falseLabel = "\%logic_false_" + to_string(id);
+            auto trueLabel = "\%logic_true_" + to_string(id);
+            auto cond1 = "\%cond_l" + to_string(id);
+            auto cond2 = "\%cond_r" + to_string(id);
+            auto result = "result" + to_string(id);
             varName = make_unique<string>("\%" + to_string(temp_count++));
 
             // allocate the result:
@@ -933,18 +937,18 @@ void LOrExp::GenerateIR(){
         varName = make_unique<string>(*(land_exp->varName));
     }else if(kind == _LOrExp_LOrOp_LAndExp){
         // increase index
-        logic_operator_index++;
+        int id = logic_operator_index++;
         total_variable_number++;
         total_variable_number++;
         total_variable_number++;
         if(lor_op->compare("||") == 0){
             // naming for variables
-            auto endLabel = "\%logic_end_" + to_string(logic_operator_index);
-            auto falseLabel = "\%logic_false_" + to_string(logic_operator_index);
-            auto trueLabel = "\%logic_true_" + to_string(logic_operator_index);
-            auto cond1 = "\%cond_l" + to_string(logic_operator_index);
-            auto cond2 = "\%cond_r" + to_string(logic_operator_index);
-            auto result = "result" + to_string(logic_operator_index);
+            auto endLabel = "\%logic_end_" + to_string(id);
+            auto falseLabel = "\%logic_false_" + to_string(id);
+            auto trueLabel = "\%logic_true_" + to_string(id);
+            auto cond1 = "\%cond_l" + to_string(id);
+            auto cond2 = "\%cond_r" + to_string(id);
+            auto result = "result" + to_string(id);
             varName = make_unique<string>("\%" + to_string(temp_count++));
 
             // allocate the result:
