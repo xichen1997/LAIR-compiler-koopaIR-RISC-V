@@ -218,12 +218,24 @@ void ConstDef::GenerateIR(){
     // do nothing
 }
 
+void ArrayIndex::GenerateIR(){
+    // do nothing
+}
+
 void ConstInitVal::EvaluateConstValues(){
     const_exp->EvaluateConstValues();
     const_value = const_exp->const_value;
 }
 
 void ConstInitVal::GenerateIR(){
+    // do nothing
+}
+
+void NestedConstInitVal::EvaluateConstValues(){
+    // do nothing
+}
+
+void NestedConstInitVal::GenerateIR(){
     // do nothing
 }
 
@@ -292,6 +304,10 @@ void InitVal::GenerateIR(){
     varName = std::make_unique<string>(*(exp->varName));
 }
 
+void NestedInitVal::GenerateIR(){
+    // do nothing
+}
+
 void FuncType::GenerateIR() {
     // Implementation for IR generation would go here
     if(functype->compare("int") == 0){
@@ -354,15 +370,15 @@ void Stmt::GenerateIR() {
     if(kind == _Lval_Assign_Exp){ 
         exp->GenerateIR();
         // check if lval is not declared, if not then we add it to initialized_variables
-        StackVariable* possible_variable_table_location = checkIsDeclared(*lval);
+        StackVariable* possible_variable_table_location = checkIsDeclared(*(lval->ident));
         if(possible_variable_table_location == nullptr){
             cerr << "Use Undeclared Vairables to assign Value" << endl;
             assert(false);
         }
         // const value(or Number) or temparory value
-        cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*lval] << "\n";
+        cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*(lval->ident)] << "\n";
         // then it must be initialized variables, can be used in the future.
-        possible_variable_table_location->initialized_variables[*lval] = possible_variable_table_location->declared_variables[*lval];
+        possible_variable_table_location->initialized_variables[*(lval->ident)] = possible_variable_table_location->declared_variables[*(lval->ident)];
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         cout << "  ret " << *(exp->varName) << endl;
@@ -520,23 +536,23 @@ void PrimaryExp::GenerateIR(){
     } else if(kind == _Lval){
         // for Lval, just use the ident as varName
         // already do the constant folding. So the upstream node don't need to care.
-        StackVariable* possible_variable_table_location = checkIsConstant(*ident);
+        StackVariable* possible_variable_table_location = checkIsConstant(*(lval->ident));
         if(possible_variable_table_location != nullptr){
             varName = std::make_unique<string>(to_string(possible_variable_table_location->const_variable_table[*ident]));
             return;
         }
 
         // check if the vairable is not declared 
-        possible_variable_table_location = checkIsDeclared(*ident);
+        possible_variable_table_location = checkIsDeclared(*(lval->ident));
         if(possible_variable_table_location == nullptr){
-            cerr << "Error: variable '" << *ident << "' is not declared" << endl;
+            cerr << "Error: variable '" << *(lval->ident) << "' is not declared" << endl;
             assert(false);
         }
 
         // is initialized?
-        possible_variable_table_location = checkIsInitialized(*ident); 
+        possible_variable_table_location = checkIsInitialized(*(lval->ident)); 
         if(possible_variable_table_location == nullptr){
-            cerr << "Error: variable '" << *ident << "' is not initiailized" << endl;
+            cerr << "Error: variable '" << *(lval->ident) << "' is not initiailized" << endl;
             assert(false);
         }
         
@@ -544,7 +560,7 @@ void PrimaryExp::GenerateIR(){
         StackVariable* first_variable_table_location = stack_variable_table[1].get();
         // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
         varName = std::make_unique<string>("%" + to_string(temp_count++));
-        if(first_variable_table_location->declared_variables.count(*ident)){
+        if(first_variable_table_location->declared_variables.count(*(lval->ident))){
             // %x ,etc,
             cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] <<endl;
         }else{
@@ -561,12 +577,12 @@ void PrimaryExp::EvaluateConstValues(){
         const_value = number->int_const;
     } else if(kind == _Lval){
         // lookup the const_variable_table to get the value
-        StackVariable* possible_variable_table_location = checkIsConstant(*ident);
+        StackVariable* possible_variable_table_location = checkIsConstant(*(lval->ident));
         if(possible_variable_table_location == nullptr){
             cerr << "Error: use not constant symbol to generate another constant variable." << endl;
             assert(false);
         }
-        const_value = possible_variable_table_location->const_variable_table[*ident];
+        const_value = possible_variable_table_location->const_variable_table[*(lval->ident)];
     } else{
         // give error information
         cerr << "Error: Invalid PrimaryExp kind for EvaluateConstValues" << endl;
@@ -1017,6 +1033,10 @@ void ConstExp::GenerateIR() {
 void ConstExp::EvaluateConstValues(){
     exp->EvaluateConstValues();
     const_value = exp->const_value;
+}
+
+void LVAL::GenerateIR(){
+    // do nothing, just a node to store the value
 }
 
 

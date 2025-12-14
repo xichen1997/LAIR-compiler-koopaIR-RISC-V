@@ -56,7 +56,7 @@ using namespace std;
 // 定义运算相关
 %type <ast_val> Decl FuncDef Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
 // 定义变量常量
-%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal NestedConstInitVal VarDecl VarDefList VarDef InitVal NestedInitVal FuncFParams FuncFParam FuncRParams LVAL
+%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal NestedConstInitVal VarDecl VarDefList VarDef InitVal NestedInitVal FuncFParams FuncFParam FuncRParams LVAL ArrayIndex
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
 %type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp BType
 
@@ -73,7 +73,7 @@ CompUnit
     auto cul = dynamic_cast<CompUnitList*>($1);
     comp_unit->comp_unit_list.reset(cul);
     ast = std::move(comp_unit);
-    cerr << "[AST] Built CompUnit at line " << @1.first_line << endl;
+    // cerr << "[AST] Built CompUnit at line " << @1.first_line << endl;
   }
   ;
 
@@ -83,14 +83,14 @@ CompUnitList
     auto cui = dynamic_cast<CompUnitItem*>($1);
     ast->list.emplace_back(cui);
     $$ = ast;
-    cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
   }
   | CompUnitList CompUnitItem {
     auto cul = dynamic_cast<CompUnitList*>($1);
     auto cui = dynamic_cast<CompUnitItem*>($2);
     cul->list.emplace_back(cui);
     $$ = cul;
-    cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built CompUnitList at line " << @1.first_line << endl;
   }
   ;
 
@@ -102,7 +102,7 @@ CompUnitItem
     ast->lineno = @1.first_line;
     ast->kind = CompUnitItem::_FuncDef;
     $$ = ast;
-    cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
+    // cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
   }
   | Decl {
     auto ast = new CompUnitItem();
@@ -111,7 +111,7 @@ CompUnitItem
     ast->lineno = @1.first_line;
     ast->kind = CompUnitItem::_Decl;
     $$ = ast;
-    cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
+    // cerr << "[AST] Built CompUnitItem at line " << @1.first_line << endl;
   }
   ;
 
@@ -129,7 +129,7 @@ FuncDef
     ast->block.reset(block);
     ast->lineno = @2.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
   }
   | BType IDENT '(' FuncFParams ')' Block{
     auto ast = new FuncDef();
@@ -146,7 +146,7 @@ FuncDef
     ast->funcfparams.reset(funcfparams);
     ast->lineno = @2.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
   }
   | VOID IDENT '(' ')' Block {
     auto ast = new FuncDef();
@@ -161,7 +161,7 @@ FuncDef
     ast->block.reset(block);
     ast->lineno = @2.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
   }
   | VOID IDENT '(' FuncFParams ')' Block{
     auto ast = new FuncDef();
@@ -178,7 +178,7 @@ FuncDef
     ast->funcfparams.reset(funcfparams);
     ast->lineno = @2.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
+    // cerr << "[AST] Built FuncDef at line " << @2.first_line << endl;
   }
   ;
 
@@ -189,14 +189,14 @@ FuncDef
 //    ast->functype = make_unique<string>("int");
 //    ast->lineno = @1.first_line; 
 //    $$ = ast;
-//    cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
+//    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
 //  }
 //  | VOID {
 //    auto ast = new FuncType();
 //    ast->functype = make_unique<string>("void");
 //    ast->lineno = @1.first_line;
 //    $$ = ast;
-//    cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
+//    // cerr << "[AST] Built FuncType at line " << @1.first_line << endl;
 //  }
 //  ;
 
@@ -212,14 +212,14 @@ FuncFParams
     auto param = dynamic_cast<FuncFParam*>($1);
     ast->list.emplace_back(param);
     $$ = ast;
-    cerr << "[AST] Built FuncFParams at line " << @1.first_line << endl;
+    // cerr << "[AST] Built FuncFParams at line " << @1.first_line << endl;
   }
   | FuncFParams ',' FuncFParam {
     auto param = dynamic_cast<FuncFParam*>($3);
     auto params = dynamic_cast<FuncFParams*>($1);
     params->list.emplace_back(param);
     $$ = params;
-    cerr << "[AST] Built FuncFParams at line " << @1.first_line << endl;
+    // cerr << "[AST] Built FuncFParams at line " << @1.first_line << endl;
   }
   ;
 
@@ -229,7 +229,7 @@ FuncFParam
     auto ast = new FuncFParam();
     ast->type.reset($1);
     ast->ident.reset($2);
-    cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
+    // cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
     $$ = ast;
   }
   ;
@@ -241,7 +241,7 @@ FuncRParams
     ast->list.emplace_back(e);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built FuncRParams at line " << @1.first_line << endl;
+    // cerr << "[AST] Built FuncRParams at line " << @1.first_line << endl;
   }
   | FuncRParams ',' Exp {
     auto e = dynamic_cast<Exp*>($3);
@@ -249,7 +249,7 @@ FuncRParams
     funcrparams->list.emplace_back(e);
     funcrparams->lineno = @1.first_line;
     $$ = funcrparams;
-    cerr << "[AST] Built FuncRParams at line " << @1.first_line << endl;
+    // cerr << "[AST] Built FuncRParams at line " << @1.first_line << endl;
   } 
   ;
 
@@ -259,14 +259,14 @@ ArrayIndex
     auto ast = new ArrayIndex();
     ast->list.emplace_back(ce);
     $$ = ast;
-    cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;
   }
   | ArrayIndex '[' ConstExp ']'{
     auto ai = dynamic_cast<ArrayIndex*>($1);
     auto ce = dynamic_cast<ConstExp*>($3);
     ai->list.emplace_back(ce);
     $$ = ai;
-    cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;
   }
   ;
 
@@ -278,7 +278,7 @@ Decl
     ast->kind = Decl::_ConstDecl;
     ast->const_decl.reset(cd);
     $$ = ast;
-    cerr << "[AST] Built Decl at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Decl at line " << @1.first_line << endl;
   }
   | VarDecl {
     auto vd = dynamic_cast<VarDecl*>($1);
@@ -286,7 +286,7 @@ Decl
     ast->kind = Decl::_VarDecl;
     ast->var_decl.reset(vd);
     $$ = ast; 
-    cerr << "[AST] Built Decl at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Decl at line " << @1.first_line << endl;
   }
   ;
 
@@ -298,7 +298,7 @@ ConstDecl
     ast->btype.reset(bt);
     ast->const_def_list.reset(cdl);
     $$ = ast;
-    cerr << "[AST] Built ConstDecl at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstDecl at line " << @1.first_line << endl;
   }
   ;
 
@@ -308,14 +308,14 @@ ConstDefList
     auto ast = new ConstDefList();
     ast->const_defs.emplace_back(cd);
     $$ = ast;
-    cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
   }
   | ConstDefList ',' ConstDef{
     auto cd = dynamic_cast<ConstDef*>($3);
     auto cdl = dynamic_cast<ConstDefList*>($1);
     cdl->const_defs.emplace_back(cd);
     $$ = cdl;
-    cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstDefList at line " << @1.first_line << endl;
   }
   ;
 
@@ -325,18 +325,20 @@ ConstDef
     auto ast = new ConstDef();
     ast->const_init_val.reset(civ);
     ast->ident.reset($1);
+    ast->kind = ConstDef::_SingleVal;
     $$ = ast;
-    cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
   } 
-  : IDENT ArrayIndex '=' ConstInitVal {
+  | IDENT ArrayIndex '=' ConstInitVal {
     auto civ = dynamic_cast<ConstInitVal*>($4);
     auto ai = dynamic_cast<ArrayIndex*>($2);
     auto ast = new ConstDef();
+    ast->kind = ConstDef::_Array;
     ast->const_init_val.reset(civ);
     ast->ai.reset(ai);
     ast->ident.reset($1);
     $$ = ast;
-    cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstDef at line " << @1.first_line << endl;
   }
   ;
 
@@ -349,7 +351,7 @@ VarDecl
     ast->btype.reset(bt);
     ast->var_def_list.reset(vdl);
     $$ = ast;
-    cerr << "[AST] Built VarDecl at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDecl at line " << @1.first_line << endl;
   }
   ;
 
@@ -359,14 +361,14 @@ VarDefList
     auto vd = dynamic_cast<VarDef*>($1);
     ast->var_defs.emplace_back(vd);
     $$ = ast;
-    cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
   }
   | VarDefList ',' VarDef {
     auto vdl = dynamic_cast<VarDefList*>($1);
     auto vd = dynamic_cast<VarDef*>($3);
     vdl->var_defs.emplace_back(vd);
     $$ = vdl;
-    cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDefList at line " << @1.first_line << endl;
   }
   ;
 
@@ -376,7 +378,7 @@ VarDef
     ast->ident.reset($1);
     ast->kind = VarDef::_SingleVal;
     $$ = ast;
-    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
   }
   | IDENT '=' InitVal { 
     auto ast = new VarDef();
@@ -385,7 +387,7 @@ VarDef
     ast->ident.reset($1);
     ast->init_val.reset(iv);
     $$ = ast;
-    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
   }
   | IDENT ArrayIndex {
     auto ast = new VarDef();
@@ -394,7 +396,7 @@ VarDef
     ast->ident.reset($1);
     ast->ai.reset(ai);
     $$ = ast;
-    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
   }
   | IDENT ArrayIndex '=' InitVal{
     auto ast = new VarDef();
@@ -405,7 +407,7 @@ VarDef
     ast->ai.reset(ai);
     ast->init_val.reset(iv);
     $$ = ast;
-    cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
+    // cerr << "[AST] Built VarDef at line " << @1.first_line << endl;
   }
   ;
 
@@ -416,7 +418,7 @@ Block
     ast->block_item_list.reset(bil);
     ast->lineno = @1.first_line;  
     $$ = ast;
-    cerr << "[AST] Built Block at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Block at line " << @1.first_line << endl;
   }
   ;
 
@@ -430,7 +432,7 @@ BlockItemList
     bil->block_items.emplace_back(bi);
     bil->lineno = @1.first_line;
     $$ = bil;
-    cerr << "[AST] Built BlockItemList at line " << @1.first_line << endl;
+    // cerr << "[AST] Built BlockItemList at line " << @1.first_line << endl;
   }
   ;
 
@@ -442,7 +444,7 @@ BlockItem
     ast->decl.reset(decl);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
+    // cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
   }
   | Stmt {    
     auto stmt = dynamic_cast<Stmt*>($1);
@@ -451,7 +453,7 @@ BlockItem
     ast->stmt.reset(stmt);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
+    // cerr << "[AST] Built BlockItem at line " << @1.first_line << endl;
   }
   ;
 
@@ -459,13 +461,13 @@ Stmt
   : LVAL '=' Exp ';'{
     auto exp = dynamic_cast<Exp*>($3);
     auto ast = new Stmt();
-    auto lval = dynamic_cast<LVal*>($1);
+    auto lval = dynamic_cast<LVAL*>($1);
     ast->kind = Stmt::_Lval_Assign_Exp;
     ast->lval.reset(lval);
     ast->exp.reset(exp);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | RETURN Exp ';' {
     auto exp = dynamic_cast<Exp*>($2);
@@ -474,7 +476,7 @@ Stmt
     ast->exp = unique_ptr<Exp>(exp);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | Exp ';' {
     auto exp = dynamic_cast<Exp*>($1);
@@ -483,14 +485,14 @@ Stmt
     ast->exp.reset(exp);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | ';' {
     auto ast = new Stmt();
     ast->kind = Stmt::_Empty;
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | Block {
     auto b = dynamic_cast<Block*>($1);
@@ -499,7 +501,7 @@ Stmt
     ast->block.reset(b);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | IF '(' Exp ')' Stmt %prec LOWER_THAN_ELSE{
     auto ast = new Stmt();
@@ -509,7 +511,7 @@ Stmt
     ast->exp.reset(e);
     ast->ifstmt.reset(ifstmt);
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | IF '(' Exp ')' Stmt ELSE Stmt{
     auto ast = new Stmt();
@@ -521,7 +523,7 @@ Stmt
     ast->ifstmt.reset(ifstmt);
     ast->elsestmt.reset(elsestmt);
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | WHILE '(' Exp ')' Stmt{
     auto ast = new Stmt();
@@ -531,19 +533,19 @@ Stmt
     ast->exp.reset(e);
     ast->whilestmt.reset(whilestmt);
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | BREAK ';' {
     auto ast = new Stmt();
     ast->kind = Stmt::_Break;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   | CONTINUE ';' {
     auto ast = new Stmt();
     ast->kind = Stmt::_Continue;
     $$ = ast;
-    cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
   ;
 
@@ -553,7 +555,7 @@ Number
     ast->int_const = $1;
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built Number at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Number at line " << @1.first_line << endl;
   }
   ;
 
@@ -564,7 +566,7 @@ Exp
     ast->lor_exp = unique_ptr<LOrExp>(ue);
     ast->lineno = @1.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built Exp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built Exp at line " << @1.first_line << endl;
   }
   ;
 
@@ -576,15 +578,16 @@ PrimaryExp
     ast->exp = unique_ptr<Exp>(e); 
     ast->lineno = @1.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
   }
   | LVAL {
     auto ast = new PrimaryExp();
     auto lval = dynamic_cast<LVAL*>($1);
     ast->kind = PrimaryExp::_Lval;
+    ast->ident = (make_unique<string>(*(lval->ident)));
     ast->lval.reset(lval);
     $$ = ast;
-    cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
   }
   | Number { 
     auto num = dynamic_cast<Number*>($1);
@@ -593,7 +596,7 @@ PrimaryExp
     ast->number = std::unique_ptr<Number>(num);
     ast->lineno = @1.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built PrimaryExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -605,7 +608,7 @@ UnaryExp
     ast->primary_exp = unique_ptr<PrimaryExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
   }
   | UnaryOp UnaryExp {
     auto op = $1;
@@ -619,7 +622,7 @@ UnaryExp
 
     ast->lineno = @1.first_line; 
     $$ = ast; 
-    cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
   }
   | IDENT '(' ')' {
     auto ast = new UnaryExp();
@@ -627,7 +630,7 @@ UnaryExp
     ast->func_name.reset($1);
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
   }
   | IDENT '(' FuncRParams ')'{
     auto params = dynamic_cast<FuncRParams*>($3);
@@ -639,7 +642,7 @@ UnaryExp
 
     $$ = ast;
     ast->lineno = @1.first_line;
-    cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built UnaryExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -651,7 +654,7 @@ MulExp
     ast->unary_exp = unique_ptr<UnaryExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built MulExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built MulExp at line " << @1.first_line << endl;
   }
   | MulExp MulOp UnaryExp {
     auto lval = dynamic_cast<MulExp*>($1);
@@ -667,7 +670,7 @@ MulExp
 
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built MulExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built MulExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -679,7 +682,7 @@ AddExp
     ast->mul_exp = unique_ptr<MulExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built AddExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built AddExp at line " << @1.first_line << endl;
   }
   | AddExp AddOp MulExp{
     auto lval = dynamic_cast<AddExp*>($1);
@@ -695,7 +698,7 @@ AddExp
 
     ast->lineno = @1.first_line;
     $$ = ast;
-    cerr << "[AST] Built AddExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built AddExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -707,7 +710,7 @@ RelExp
     ast->add_exp = unique_ptr<AddExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built RelExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built RelExp at line " << @1.first_line << endl;
   }
   | RelExp RelOp AddExp {
     auto lval = dynamic_cast<RelExp*>($1);
@@ -723,7 +726,7 @@ RelExp
 
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built RelExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built RelExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -736,7 +739,7 @@ EqExp
     ast->rel_exp = unique_ptr<RelExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built EqExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built EqExp at line " << @1.first_line << endl;
   }
   | EqExp EqOp RelExp {
     auto lval = dynamic_cast<EqExp*>($1);
@@ -752,7 +755,7 @@ EqExp
 
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built EqExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built EqExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -764,7 +767,7 @@ LAndExp
     ast->eq_exp = unique_ptr<EqExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built LAndExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LAndExp at line " << @1.first_line << endl;
   }
   | LAndExp LAndOp EqExp {
     auto lval = dynamic_cast<LAndExp*>($1);
@@ -780,7 +783,7 @@ LAndExp
 
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built LAndExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LAndExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -792,7 +795,7 @@ LOrExp
     ast->land_exp = unique_ptr<LAndExp>(pe);
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
   }
   | LOrExp LOrOp LAndExp {
     auto lval = dynamic_cast<LOrExp*>($1);
@@ -808,7 +811,7 @@ LOrExp
 
     ast->lineno = @1.first_line; 
     $$ = ast;
-    cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LOrExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -819,21 +822,21 @@ ConstInitVal
     ast->const_exp.reset(ce);
     ast->kind = ConstInitVal::_ConstExp;
     $$ = ast;
-    cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
   }
   | '{' '}'{
     auto ast = new ConstInitVal();
     ast->kind = ConstInitVal::_Empty;
     $$ = ast; 
-    cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
   }
   | '{' NestedConstInitVal '}' {
-    auto nciv = dynamic_cast<NestedConstInitVal*>($1);
+    auto nciv = dynamic_cast<NestedConstInitVal*>($2);
     auto ast = new ConstInitVal();
     ast->kind = ConstInitVal::_InitList;
     ast->nested_const_init_val.reset(nciv);
     $$ = ast;
-    cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
   }
   ;
 
@@ -843,14 +846,14 @@ NestedConstInitVal
     auto ast = new NestedConstInitVal();
     ast->list.emplace_back(civ);
     $$ = ast;
-    cerr << "[AST] Built NestedConstInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built NestedConstInitVal at line " << @1.first_line << endl;
   }
   | NestedConstInitVal NestedConstInitVal{
     auto civ = dynamic_cast<ConstInitVal*>($2);
     auto nciv = dynamic_cast<NestedConstInitVal*>($1);
     nciv->list.emplace_back(civ);
     $$ = nciv;
-    cerr << "[AST] Built NestedConstInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built NestedConstInitVal at line " << @1.first_line << endl;
   }
   ;
 
@@ -862,13 +865,13 @@ InitVal
     ast->exp.reset(e);
     ast->kind = InitVal::_Exp;
     $$ = ast;
-    cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
   }
   | '{' '}'{
     auto ast = new InitVal();
     ast->kind = InitVal::_Empty;
     $$ = ast;
-    cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
   }
   | '{' NestedInitVal '}'{
     auto ast = new InitVal();
@@ -876,7 +879,7 @@ InitVal
     auto niv = dynamic_cast<NestedInitVal*>($2);
     ast->nested_init_val.reset(niv);
     $$ = ast;
-    cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
   }
   ;
 
@@ -887,14 +890,14 @@ NestedInitVal
     auto ast = new NestedInitVal();
     ast->list.emplace_back(iv);
     $$ = ast;
-    cerr << "[AST] Built NestedInitVal at line " << @1.first_line << endl;
+    // cerr << "[AST] Built NestedInitVal at line " << @1.first_line << endl;
   }
   | NestedInitVal ',' InitVal{
     auto iv = dynamic_cast<InitVal*>($3);
     auto niv = dynamic_cast<NestedInitVal*>($1);
     niv->list.emplace_back(iv);
-    $$ = ast;
-    cerr << "[AST] Built NestedInitVal at line " << @1.first_line << endl;
+    $$ = niv;
+    // cerr << "[AST] Built NestedInitVal at line " << @1.first_line << endl;
   }
   ;
 
@@ -905,7 +908,7 @@ ConstExp
     auto ast = new ConstExp();
     ast->exp.reset(e);
     $$ = ast;
-    cerr << "[AST] Built ConstExp at line " << @1.first_line << endl;
+    // cerr << "[AST] Built ConstExp at line " << @1.first_line << endl;
   }
   ;
 
@@ -947,26 +950,26 @@ LOrOp
 LVAL
   : IDENT  { 
     auto ast = new LVAL();
-    ast->ident = $1; 
+    ast->ident.reset($1); 
     ast->kind = LVAL::_Ident;
     $$ = ast; 
-    cerr << "[AST] Built LVAL at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LVAL at line " << @1.first_line << endl;
   }
   | IDENT ArrayIndex{
     auto ast = new LVAL();
     auto ai = dynamic_cast<ArrayIndex*>($2);
-    ast->ident = $1;
+    ast->ident.reset($1);
     ast->kind = LVAL::_ArrayElement;
     ast->ai.reset(ai);
     $$ = ast; 
-    cerr << "[AST] Built LVAL at line " << @1.first_line << endl;
+    // cerr << "[AST] Built LVAL at line " << @1.first_line << endl;
   }
 %%
 
 // 定义错误处理函数, 其中第二个参数是错误信息
 // parser 如果发生错误 (例如输入的程序出现了语法错误), 就会调用这个函数
 void yyerror(YYLTYPE *loc, std::unique_ptr<BaseAST> &ast, const char *s) {
-    std::cerr << "Syntax error: " << s
+     std:: cerr << "Syntax error: " << s
               << " at line " << loc->first_line
               << std::endl;
 }

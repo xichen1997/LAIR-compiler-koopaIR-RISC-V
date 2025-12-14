@@ -365,16 +365,17 @@ class ConstDefList : public BaseAST{
     void EvaluateConstValues();
 };
 
-class ArrayIndex : public BaseAST{
-    public:
-    std::vector<std::unique_ptr<ConstDef>> dims;
 
-    void GenerateIR() override;
-}
 class ConstDef : public BaseAST{
     public:
+    enum Kind{
+        _SingleVal,
+        _Array
+    } kind;
     std::unique_ptr<string> ident;
+    std::unique_ptr<ArrayIndex> ai;
     std::unique_ptr<ConstInitVal> const_init_val;
+
     ConstVal const_value;
 
     void GenerateIR() override;
@@ -386,7 +387,7 @@ class ArrayIndex : public BaseAST{
     std::vector<std::unique_ptr<ConstExp>> list;
 
     void GenerateIR() override;
-}
+};
 
 class ConstInitVal : public BaseAST{
     public:
@@ -394,7 +395,7 @@ class ConstInitVal : public BaseAST{
         _ConstExp,
         _Empty,
         _InitList
-    }
+    } kind;
     std::unique_ptr<NestedConstInitVal> nested_const_init_val;
     std::unique_ptr<ConstExp> const_exp;
     ConstVal const_value;
@@ -409,7 +410,7 @@ class NestedConstInitVal : public BaseAST{
 
     void GenerateIR() override;
     void EvaluateConstValues();
-}
+};
 
 class VarDecl : public BaseAST{
     public:
@@ -458,7 +459,7 @@ class NestedInitVal : public BaseAST {
     std::vector<std::unique_ptr<InitVal>> list;
 
     void GenerateIR() override;
-}
+};
 
 class LVAL : public BaseAST{
     public:
@@ -469,5 +470,5 @@ class LVAL : public BaseAST{
     std::unique_ptr<string> ident;
     std::unique_ptr<ArrayIndex> ai;
 
-    void GneerateIR() override;
-}
+    void GenerateIR() override;
+};
