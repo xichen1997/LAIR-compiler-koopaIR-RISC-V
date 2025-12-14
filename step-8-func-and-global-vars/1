@@ -1,2 +1,0 @@
-usage: autotest [-h] [-koopa | -riscv | -perf] [-t TEST_CASE_DIR] [-w WORKING_DIR] [-s SUB_DIR] repo_dir
-autotest: error: unrecognized arguments: temp.txt
