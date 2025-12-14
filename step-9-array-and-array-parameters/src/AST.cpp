@@ -203,14 +203,18 @@ void ConstDefList::GenerateIR(){
 
 void ConstDef::EvaluateConstValues(){
     const_init_val->EvaluateConstValues();
-    const_value = const_init_val->const_value;
-    // update the const_variable_table
-    StackVariable* current_variable_table_location = stack_variable_table.back().get();
-    if(current_variable_table_location->const_variable_table.count(*ident) > 0){
-        cerr << "Error: Redefinition of constant variable " << *ident << " at line " << lineno << endl;
-        assert(false);
+    if(kind == _SingleVal){
+        const_value = const_init_val->const_value;
+        // update the const_variable_table
+        StackVariable* current_variable_table_location = stack_variable_table.back().get();
+        if(current_variable_table_location->const_variable_table.count(*ident) > 0){
+            cerr << "Error: Redefinition of constant variable " << *ident << " at line " << lineno << endl;
+            assert(false);
+        }
+        current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
+    }else if(kind == _Array){
+        // do nothing
     }
-    current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
     
 }
 
@@ -223,8 +227,14 @@ void ArrayIndex::GenerateIR(){
 }
 
 void ConstInitVal::EvaluateConstValues(){
-    const_exp->EvaluateConstValues();
-    const_value = const_exp->const_value;
+    if(kind == _ConstExp){
+        const_exp->EvaluateConstValues();
+        const_value = const_exp->const_value;
+    } else if(kind == _Empty){
+        // do nothing
+    } else if(kind == _InitList){
+        nested_const_init_val->EvaluateConstValues();
+    }
 }
 
 void ConstInitVal::GenerateIR(){
@@ -261,12 +271,22 @@ void VarDef::GenerateIR(){
         current_variable_table_location->declared_variables[*ident] = *ident; 
         if(init_val){
             init_val->GenerateIR();
-            string tmp = *(init_val->varName);
-            cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
-            current_variable_table_location->initialized_variables[*ident] = *ident;
+            if(init_val->kind == InitVal::_Exp){
+                string tmp = *(init_val->varName);
+                cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
+                current_variable_table_location->initialized_variables[*ident] = *ident;
+            } else if(init_val->kind == InitVal::_Empty){
+                // do nothing
+            } else if(init_val->kind == InitVal::_InitList){
+                // do nothing 
+            }
         }else{
-            cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
-            current_variable_table_location->initialized_variables[*ident] = *ident;
+            if(kind == _SingleVal){
+                cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
+                current_variable_table_location->initialized_variables[*ident] = *ident;
+            }else if(kind == _InitList){
+                // do nothing
+            }
         }
         return;
     }
@@ -287,21 +307,33 @@ void VarDef::GenerateIR(){
     cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
 
     if(init_val){
-        init_val->GenerateIR();
-        // check if the init_val variable is initialized and not temporary variables
-        string tmp = *(init_val->varName);
-
-        // comes from primaryexp so it must have value or it will exit earlier.
-        cout << "  store " << *(init_val->varName) << ", @" << *ident + "_" + to_string(local_variable_index) << "\n";
-
-        // initialize it later
-        current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
+        if(init_val->kind == InitVal::_Exp){
+            init_val->GenerateIR();
+            // check if the init_val variable is initialized and not temporary variables
+            string tmp = *(init_val->varName);
+    
+            // comes from primaryexp so it must have value or it will exit earlier.
+            cout << "  store " << *(init_val->varName) << ", @" << *ident + "_" + to_string(local_variable_index) << "\n";
+    
+            // initialize it later
+            current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
+        }else if(init_val->kind == InitVal::_Empty){
+            // do nothing
+        }else if(init_val->kind == InitVal::_InitList){
+            // do nothing
+        }
     }
 }
 
 void InitVal::GenerateIR(){
-    exp->GenerateIR();
-    varName = std::make_unique<string>(*(exp->varName));
+    if(kind == _Exp){
+        exp->GenerateIR();
+        varName = std::make_unique<string>(*(exp->varName));
+    }else if(kind == _Empty){
+        // do nothing for now.
+    }else if(kind == _InitList){
+        nested_init_val->GenerateIR();
+    }
 }
 
 void NestedInitVal::GenerateIR(){
