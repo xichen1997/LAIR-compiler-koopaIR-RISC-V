@@ -131,7 +131,7 @@ void FuncDef::GenerateIR() {
     // define function type globally
     func_type_map[*ident] = *(func_type->functype);
 
-    // define here, need a new stack variable table for parameters 
+    // define here, need a new stack variable table for parameters (in the second stack_variable_table)
     auto ptr = std::make_unique<StackVariable>();
     stack_variable_table.push_back(std::move(ptr));
 
@@ -213,7 +213,12 @@ void ConstDef::EvaluateConstValues(){
         }
         current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
     }else if(kind == _Array){
-        // do nothing
+        // Don't need to seperate the global def or not, we have to output this to the 
+        // koopa IR, rather than go to the symbol table.
+        if(is_defining_global_var){
+            // do nothing
+        }
+
     }
     
 }
@@ -224,6 +229,10 @@ void ConstDef::GenerateIR(){
 
 void ArrayIndex::GenerateIR(){
     // do nothing
+    for(int i = 0; i < list.size(); ++i){
+        // const_exp evaluates its values.
+        list[i]->EvaluateConstValues();
+    }
 }
 
 void ConstInitVal::EvaluateConstValues(){
@@ -285,7 +294,17 @@ void VarDef::GenerateIR(){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
                 current_variable_table_location->initialized_variables[*ident] = *ident;
             }else if(kind == _InitList){
-                // do nothing
+                ai->GenerateIR();
+                cout << "global @" << *ident << " = alloc ";
+                string tmp = "";
+                for(int i = ai->list.size() - 1; i >= 0; --i){
+                    if(i == ai->list.size() - 1){
+                        tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
+                    }else{
+                        tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
+                    }
+                }
+                cout << tmp << endl;
             }
         }
         return;
@@ -299,16 +318,43 @@ void VarDef::GenerateIR(){
         assert(false);
     }
     // declare it here
-    current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index);
+    if(kind == _SingleVal){
+        // for the single value type, need to add a unique identifier
+        current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index);
 
-    // local defined vairable need to increase total_variable_number by 1;
-    total_variable_number++;
+        // local defined vairable need to increase total_variable_number by 1;
+        total_variable_number++;
 
-    cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
-
+        cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
+    }else if(kind == _InitList){
+        // for the array type, use the orignal name directly.
+        current_variable_table_location->declared_variables[*ident] = *ident;
+        // 
+        ai->GenerateIR();
+        int sum = 1;
+        for(int i = 0; i < ai->list.size(); ++i){
+            sum *= get<int>(ai->list[i]->const_value);
+        }
+        //
+        total_variable_number += sum;
+        
+        // generate IR
+        cout << "  @" << *ident << " = alloc ";
+        string tmp = "";
+        for(int i = ai->list.size() - 1; i >= 0; --i){
+            if(i == ai->list.size() - 1){
+                tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
+            }else{
+                tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
+            }
+        }
+        cout << tmp;
+        // if not initialized need to complete a new line symbol.
+        if(!init_val) cout << endl; 
+    }
     if(init_val){
+        init_val->GenerateIR();
         if(init_val->kind == InitVal::_Exp){
-            init_val->GenerateIR();
             // check if the init_val variable is initialized and not temporary variables
             string tmp = *(init_val->varName);
     
@@ -318,9 +364,9 @@ void VarDef::GenerateIR(){
             // initialize it later
             current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
         }else if(init_val->kind == InitVal::_Empty){
-            // do nothing
+            // do nothing for the zero initialization.
         }else if(init_val->kind == InitVal::_InitList){
-            // do nothing
+            // need to deal with the initialization in the stack memory.
         }
     }
 }
