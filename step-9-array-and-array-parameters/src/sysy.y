@@ -254,16 +254,16 @@ FuncRParams
   ;
 
 ArrayIndex
-  : '[' ConstExp ']' {
-    auto ce = dynamic_cast<ConstExp*>($2);
+  : '[' Exp ']' {
+    auto ce = dynamic_cast<Exp*>($2);
     auto ast = new ArrayIndex();
     ast->list.emplace_back(ce);
     $$ = ast;
     // cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;
   }
-  | ArrayIndex '[' ConstExp ']'{
+  | ArrayIndex '[' Exp ']'{
     auto ai = dynamic_cast<ArrayIndex*>($1);
-    auto ce = dynamic_cast<ConstExp*>($3);
+    auto ce = dynamic_cast<Exp*>($3);
     ai->list.emplace_back(ce);
     $$ = ai;
     // cerr << "[AST] Built ArrayIndex at line " << @1.first_line << endl;

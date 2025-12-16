@@ -6,7 +6,7 @@ int init = 1;
 int arr[20][30];
 
 int main() {
-  int brr[20][30];
+  int brr[2][4] = {1, {2}, {3, 4}};
   putint(x);
   putch(32);
   putint(y);

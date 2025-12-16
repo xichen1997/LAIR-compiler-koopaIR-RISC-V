@@ -10,12 +10,14 @@ struct StackVariable{
 bool is_defining_global_var = false;
 
 vector<std::unique_ptr<StackVariable>> stack_variable_table;
+vector<string> array_init;
 
 int func_index = 0;
 int temp_count= 0;
 int total_variable_number = 0;
 int max_parameter_number = 0;
 bool is_function_called = 0;
+
 std::unordered_map<std::string, int> func_total_vars_map;
 std::unordered_map<std::string, int> func_max_params_map;
 std::unordered_map<std::string, bool> func_is_called_map;
@@ -31,6 +33,8 @@ stack<int> st_while; // for tracking the while_index
 StackVariable* checkIsConstant(const string& tmp);
 StackVariable* checkIsDeclared(const string& tmp);
 StackVariable* checkIsInitialized(const string& tmp);
+
+void PrintArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
 
 using namespace std;
 
@@ -172,8 +176,8 @@ void FuncFParam::GenerateIR(){
     varName = std::make_unique<string>("\%" + *ident);
     // varName =  std::make_unique<string>("\%" + to_string(temp_count++));
     // cout << "  " << *varName  << " = load %" << *ident << endl;  
-
 }
+
 void Decl::GenerateIR(){
     // Implementation for IR generation would go here
     if(kind == _VarDecl){
@@ -227,11 +231,18 @@ void ConstDef::GenerateIR(){
     // do nothing
 }
 
-void ArrayIndex::GenerateIR(){
+void ArrayIndex::EvaluateConstValues(){
     // do nothing
     for(int i = 0; i < list.size(); ++i){
         // const_exp evaluates its values.
         list[i]->EvaluateConstValues();
+    }
+}
+
+void ArrayIndex::GenerateIR(){
+    for(int i = 0; i < list.size(); ++i){
+        // exp generate their IR.
+        list[i]->GenerateIR();
     }
 }
 
@@ -269,6 +280,8 @@ void VarDefList::GenerateIR(){
 }
 
 void VarDef::GenerateIR(){
+    // clear the array init for each list definition.
+    array_init.resize(0);
     // Need to seperate global declaration.
     if(is_defining_global_var){
         StackVariable* current_variable_table_location = stack_variable_table.back().get();
@@ -284,17 +297,37 @@ void VarDef::GenerateIR(){
                 string tmp = *(init_val->varName);
                 cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
                 current_variable_table_location->initialized_variables[*ident] = *ident;
-            } else if(init_val->kind == InitVal::_Empty){
-                // do nothing
-            } else if(init_val->kind == InitVal::_InitList){
-                // do nothing 
+            } else{
+                ai->EvaluateConstValues();
+                cout << "global @" << *ident << " = alloc ";
+                string tmp = "";
+                for(int i = ai->list.size() - 1; i >= 0; --i){
+                    if(i == ai->list.size() - 1){
+                        tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
+                    }else{
+                        tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
+                    }
+                }
+                cout << tmp;
+                cout << " = ";
+                cout << "{ ";
+                PrintArrayInitialization(init_val->nested_init_val, ai, 1, 0);
+                for(int i = 0; i < array_init.size(); ++i) {
+                    if(i == 0){
+                        cout << array_init[0];
+                    }else{
+                        cout << ", " << array_init[i];
+                    }
+                }
+                cerr << array_init.size() << endl;
+                cout << " }";
             }
         }else{
             if(kind == _SingleVal){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
                 current_variable_table_location->initialized_variables[*ident] = *ident;
             }else if(kind == _InitList){
-                ai->GenerateIR();
+                ai->EvaluateConstValues();
                 cout << "global @" << *ident << " = alloc ";
                 string tmp = "";
                 for(int i = ai->list.size() - 1; i >= 0; --i){
@@ -330,7 +363,7 @@ void VarDef::GenerateIR(){
         // for the array type, use the orignal name directly.
         current_variable_table_location->declared_variables[*ident] = *ident;
         // 
-        ai->GenerateIR();
+        ai->EvaluateConstValues();
         int sum = 1;
         for(int i = 0; i < ai->list.size(); ++i){
             sum *= get<int>(ai->list[i]->const_value);
@@ -365,8 +398,21 @@ void VarDef::GenerateIR(){
             current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
         }else if(init_val->kind == InitVal::_Empty){
             // do nothing for the zero initialization.
+            cout << ", zeroinit" << endl;
         }else if(init_val->kind == InitVal::_InitList){
             // need to deal with the initialization in the stack memory.
+            cout << " = ";
+            cout << "{";
+            PrintArrayInitialization(init_val->nested_init_val, ai, 1, 0);
+            for(int i = 0; i < array_init.size(); ++i) {
+                if(i == 0){
+                    cout << array_init[0];
+                }else{
+                    cout << ", " << array_init[i];
+                }
+            }
+            cout << "}";
+            cout << endl;
         }
     }
 }
@@ -1147,4 +1193,37 @@ StackVariable* checkIsConstant(const string &symbol){
         }
     }
     return nullptr;
+}
+
+void PrintArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx){
+    int start = idx;
+    int block_size = 1;
+    int inc = 0;
+    for(int i = dim; i < ai->list.size(); ++i){
+        block_size *= get<int>(ai->list[i]->const_value);
+    }
+    if(dim == ai->list.size()){
+        // the last dim, should only have the initval
+        for(int i = 0; i < niv->list.size(); ++i){
+            niv->list[i]->exp->GenerateIR();
+            array_init.push_back(*(niv->list[i]->exp->varName));
+            inc++;
+        }
+    }
+    else {
+        for(int i = 0; i < niv->list.size(); ++i){
+            inc++;
+            if(niv->list[i]->kind == InitVal::_Exp){
+                niv->list[i]->exp->GenerateIR();
+                array_init.push_back(*(niv->list[i]->exp->varName));
+            }else{
+                niv->list[i]->nested_init_val->GenerateIR();
+                PrintArrayInitialization(niv->list[i]->nested_init_val, ai, dim + 1, start + inc);
+            }
+        }
+    }
+    while(inc < start + block_size) {
+        inc++;
+        array_init.push_back("0");
+    }
 }

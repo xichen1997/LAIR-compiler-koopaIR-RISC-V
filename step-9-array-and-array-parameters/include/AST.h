@@ -384,9 +384,10 @@ class ConstDef : public BaseAST{
 
 class ArrayIndex : public BaseAST{
     public:
-    std::vector<std::unique_ptr<ConstExp>> list;
+    std::vector<std::unique_ptr<Exp>> list;
 
     void GenerateIR() override;
+    void EvaluateConstValues();
 };
 
 class ConstInitVal : public BaseAST{
