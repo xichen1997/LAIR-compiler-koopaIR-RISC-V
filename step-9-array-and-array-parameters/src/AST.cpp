@@ -14,6 +14,7 @@ vector<string> array_init;
 
 int func_index = 0;
 int temp_count= 0;
+int temp_count_ptr = 0;
 int total_variable_number = 0;
 int max_parameter_number = 0;
 bool is_function_called = 0;
@@ -34,7 +35,37 @@ StackVariable* checkIsConstant(const string& tmp);
 StackVariable* checkIsDeclared(const string& tmp);
 StackVariable* checkIsInitialized(const string& tmp);
 
-void PrintArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
+void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
+void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
+
+void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx){
+    if(depth == limit){
+        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
+        for(int i = 0; i < currentDimensionSize; ++i){
+            if(i == 0){
+                cout << array_init[idx++];
+            }else {
+                cout << ", " << array_init[idx++];
+            }
+        }
+    }else if(depth == 0){
+        cout << "{ ";
+        PrintArrayInitInNestedFormat(ai, 1, limit, idx);
+        cout << " }";
+    }else{
+        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
+        for(int i = 0; i < currentDimensionSize; ++i){
+            if(i == 0){
+                cout << "{ ";
+            }else{
+                cout << ", { ";
+            }
+            PrintArrayInitInNestedFormat(ai, depth + 1, limit, idx);
+            cout << " } ";
+        }
+    
+    }
+}
 
 using namespace std;
 
@@ -99,6 +130,7 @@ void CompUnitItem::GenerateIR() {
         max_parameter_number = 0;
         is_function_called = false;
         temp_count = 0; 
+        temp_count_ptr = 0;
         func_def->GenerateIR();
         // For generating RSIC-V code.
         // store the total_variable_number in the total_variable_number_list
@@ -206,6 +238,7 @@ void ConstDefList::GenerateIR(){
 } 
 
 void ConstDef::EvaluateConstValues(){
+    array_init.resize(0);
     const_init_val->EvaluateConstValues();
     if(kind == _SingleVal){
         const_value = const_init_val->const_value;
@@ -219,10 +252,55 @@ void ConstDef::EvaluateConstValues(){
     }else if(kind == _Array){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
+        ai->EvaluateConstValues();
         if(is_defining_global_var){
-            // do nothing
+            cout << "global @" << *ident << " = alloc ";
+        }else{
+            cout << "  @" << *ident << " = alloc ";
         }
+        string tmp = "";
+        for(int i = ai->list.size() - 1; i >= 0; --i){
+            if(i == ai->list.size() - 1){
+                tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
+            }else{
+                tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
+            }
+        }
+        if(const_init_val && is_defining_global_var){
+            // need to deal with the initialization in the stack memory.
+            cout << ", ";
+            GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
+            int idx = 0;
+            PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
+            cout << endl;
+        } else if(!const_init_val){
+            cout << ", zeroinit";
+        } else if(const_init_val && !is_defining_global_var){
+            // Get the elments
+            GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
 
+            // Print _ptr_{temp_count_ptr} for the location of the array.
+            for(int i = 0; i < array_init.size(); ++i) {
+                // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
+                for(int j = 0; j < ai->list.size(); ++j){
+                    total_variable_number++;
+                    if(j == 0){
+                        cout << "  \%ptr_" << temp_count_ptr++ 
+                             << " = getelemptr @" << *ident 
+                             << ", " << array_init[i] << endl;
+                    }else {
+                        cout << "  \%ptr_" << temp_count_ptr
+                             << " = getelemptr @" << "\%ptr_" << temp_count_ptr-1 
+                             << ", " << array_init[i] << endl;
+                        temp_count_ptr++;
+                    }
+                }
+
+                // use the load to get the value out of the array
+                cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
+            }
+        }
+        cout << endl;
     }
     
 }
@@ -253,7 +331,7 @@ void ConstInitVal::EvaluateConstValues(){
     } else if(kind == _Empty){
         // do nothing
     } else if(kind == _InitList){
-        nested_const_init_val->EvaluateConstValues();
+        // do nothing, nodes already built
     }
 }
 
@@ -297,7 +375,11 @@ void VarDef::GenerateIR(){
                 string tmp = *(init_val->varName);
                 cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
                 current_variable_table_location->initialized_variables[*ident] = *ident;
-            } else{
+            }else if(init_val->kind == InitVal::_Empty){
+                // zero init
+                cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
+            } 
+            else{
                 ai->EvaluateConstValues();
                 cout << "global @" << *ident << " = alloc ";
                 string tmp = "";
@@ -309,18 +391,11 @@ void VarDef::GenerateIR(){
                     }
                 }
                 cout << tmp;
-                cout << " = ";
-                cout << "{ ";
-                PrintArrayInitialization(init_val->nested_init_val, ai, 1, 0);
-                for(int i = 0; i < array_init.size(); ++i) {
-                    if(i == 0){
-                        cout << array_init[0];
-                    }else{
-                        cout << ", " << array_init[i];
-                    }
-                }
-                cerr << array_init.size() << endl;
-                cout << " }";
+                cout << ", ";
+                GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
+                int idx = 0;
+                PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
+                cout << endl;
             }
         }else{
             if(kind == _SingleVal){
@@ -337,7 +412,7 @@ void VarDef::GenerateIR(){
                         tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
                     }
                 }
-                cout << tmp << endl;
+                cout << tmp << ", zeroinit" << endl;
             }
         }
         return;
@@ -381,9 +456,7 @@ void VarDef::GenerateIR(){
                 tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
             }
         }
-        cout << tmp;
-        // if not initialized need to complete a new line symbol.
-        if(!init_val) cout << endl; 
+        cout << tmp << endl; 
     }
     if(init_val){
         init_val->GenerateIR();
@@ -398,20 +471,33 @@ void VarDef::GenerateIR(){
             current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
         }else if(init_val->kind == InitVal::_Empty){
             // do nothing for the zero initialization.
-            cout << ", zeroinit" << endl;
+            cout << endl;
         }else if(init_val->kind == InitVal::_InitList){
-            // need to deal with the initialization in the stack memory.
-            cout << " = ";
-            cout << "{";
-            PrintArrayInitialization(init_val->nested_init_val, ai, 1, 0);
+
+            // Get the elments
+            GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
+
+            // Print _ptr_{temp_count_ptr} for the location of the array.
             for(int i = 0; i < array_init.size(); ++i) {
-                if(i == 0){
-                    cout << array_init[0];
-                }else{
-                    cout << ", " << array_init[i];
+                // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
+                for(int j = 0; j < ai->list.size(); ++j){
+                    total_variable_number++;
+                    if(j == 0){
+                        cout << "  \%ptr_" << temp_count_ptr++ 
+                             << " = getelemptr @" << *ident 
+                             << ", " << array_init[i] << endl;
+                    }else {
+                        cout << "  \%ptr_" << temp_count_ptr 
+                             << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                             << ", " << array_init[i] << endl;
+                        temp_count_ptr++;
+                    }
                 }
+
+                // use the load to get the value out of the array
+                cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
             }
-            cout << "}";
+
             cout << endl;
         }
     }
@@ -424,7 +510,7 @@ void InitVal::GenerateIR(){
     }else if(kind == _Empty){
         // do nothing for now.
     }else if(kind == _InitList){
-        nested_init_val->GenerateIR();
+        // nested_init_val->GenerateIR();
     }
 }
 
@@ -1195,7 +1281,7 @@ StackVariable* checkIsConstant(const string &symbol){
     return nullptr;
 }
 
-void PrintArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx){
+void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx){
     int start = idx;
     int block_size = 1;
     int inc = 0;
@@ -1217,8 +1303,49 @@ void PrintArrayInitialization(const unique_ptr<NestedInitVal> & niv, const uniqu
                 niv->list[i]->exp->GenerateIR();
                 array_init.push_back(*(niv->list[i]->exp->varName));
             }else{
+                if(!niv->list[i]->nested_init_val) {
+                    array_init.push_back("0");
+                    continue;
+                }
                 niv->list[i]->nested_init_val->GenerateIR();
-                PrintArrayInitialization(niv->list[i]->nested_init_val, ai, dim + 1, start + inc);
+                GetArrayInitialization(niv->list[i]->nested_init_val, ai, dim + 1, start + inc);
+            }
+        }
+    }
+    while(inc < start + block_size) {
+        inc++;
+        array_init.push_back("0");
+    }
+}
+
+void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx){
+    int start = idx;
+    int block_size = 1;
+    int inc = 0;
+    for(int i = dim; i < ai->list.size(); ++i){
+        block_size *= get<int>(ai->list[i]->const_value);
+    }
+    if(dim == ai->list.size()){
+        // the last dim, should only have the initval
+        for(int i = 0; i < nciv->list.size(); ++i){
+            nciv->list[i]->const_exp->GenerateIR();
+            array_init.push_back(to_string(get<int>(nciv->list[i]->const_exp->const_value)));
+            inc++;
+        }
+    }
+    else {
+        for(int i = 0; i < nciv->list.size(); ++i){
+            inc++;
+            if(nciv->list[i]->kind == ConstInitVal::_ConstExp){
+                nciv->list[i]->const_exp->GenerateIR();
+                array_init.push_back(to_string(get<int>(nciv->list[i]->const_exp->const_value)));
+            }else{
+                if(!nciv->list[i]->nested_const_init_val) {
+                    array_init.push_back("0");
+                    continue;
+                }
+                nciv->list[i]->nested_const_init_val->GenerateIR();
+                GetArrayInitialization(nciv->list[i]->nested_const_init_val, ai, dim + 1, start + inc);
             }
         }
     }
