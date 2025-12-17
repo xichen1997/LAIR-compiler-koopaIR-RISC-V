@@ -827,6 +827,8 @@ ConstInitVal
   | '{' '}'{
     auto ast = new ConstInitVal();
     ast->kind = ConstInitVal::_Empty;
+    auto nciv = new NestedConstInitVal();
+    ast->nested_const_init_val.reset(nciv);
     $$ = ast; 
     // cerr << "[AST] Built ConstInitVal at line " << @1.first_line << endl;
   }
@@ -848,8 +850,8 @@ NestedConstInitVal
     $$ = ast;
     // cerr << "[AST] Built NestedConstInitVal at line " << @1.first_line << endl;
   }
-  | NestedConstInitVal NestedConstInitVal{
-    auto civ = dynamic_cast<ConstInitVal*>($2);
+  | NestedConstInitVal ',' ConstInitVal{
+    auto civ = dynamic_cast<ConstInitVal*>($3);
     auto nciv = dynamic_cast<NestedConstInitVal*>($1);
     nciv->list.emplace_back(civ);
     $$ = nciv;

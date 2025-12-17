@@ -38,34 +38,8 @@ StackVariable* checkIsInitialized(const string& tmp);
 void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
 void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
 
-void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx){
-    if(depth == limit){
-        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
-        for(int i = 0; i < currentDimensionSize; ++i){
-            if(i == 0){
-                cout << array_init[idx++];
-            }else {
-                cout << ", " << array_init[idx++];
-            }
-        }
-    }else if(depth == 0){
-        cout << "{ ";
-        PrintArrayInitInNestedFormat(ai, 1, limit, idx);
-        cout << " }";
-    }else{
-        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
-        for(int i = 0; i < currentDimensionSize; ++i){
-            if(i == 0){
-                cout << "{ ";
-            }else{
-                cout << ", { ";
-            }
-            PrintArrayInitInNestedFormat(ai, depth + 1, limit, idx);
-            cout << " } ";
-        }
-    
-    }
-}
+void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx);
+void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string & varName);
 
 using namespace std;
 
@@ -280,25 +254,7 @@ void ConstDef::EvaluateConstValues(){
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
 
             // Print _ptr_{temp_count_ptr} for the location of the array.
-            for(int i = 0; i < array_init.size(); ++i) {
-                // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
-                for(int j = 0; j < ai->list.size(); ++j){
-                    total_variable_number++;
-                    if(j == 0){
-                        cout << "  \%ptr_" << temp_count_ptr++ 
-                             << " = getelemptr @" << *ident 
-                             << ", " << array_init[i] << endl;
-                    }else {
-                        cout << "  \%ptr_" << temp_count_ptr
-                             << " = getelemptr @" << "\%ptr_" << temp_count_ptr-1 
-                             << ", " << array_init[i] << endl;
-                        temp_count_ptr++;
-                    }
-                }
-
-                // use the load to get the value out of the array
-                cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
-            }
+            InitializeLocalList(ai, *ident);
         }
         cout << endl;
     }
@@ -369,12 +325,17 @@ void VarDef::GenerateIR(){
         }
         // use the name directly as the name of the global var
         current_variable_table_location->declared_variables[*ident] = *ident; 
+
+        // it must be defined because it's global
+        current_variable_table_location->initialized_variables[*ident] = *ident;
         if(init_val){
+            // visit sub AST to get value
             init_val->GenerateIR();
+
+            // Exp empty or InitList
             if(init_val->kind == InitVal::_Exp){
                 string tmp = *(init_val->varName);
                 cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
-                current_variable_table_location->initialized_variables[*ident] = *ident;
             }else if(init_val->kind == InitVal::_Empty){
                 // zero init
                 cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
@@ -400,7 +361,6 @@ void VarDef::GenerateIR(){
         }else{
             if(kind == _SingleVal){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
-                current_variable_table_location->initialized_variables[*ident] = *ident;
             }else if(kind == _InitList){
                 ai->EvaluateConstValues();
                 cout << "global @" << *ident << " = alloc ";
@@ -426,28 +386,22 @@ void VarDef::GenerateIR(){
         assert(false);
     }
     // declare it here
+    current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index++);
+    total_variable_number++;
     if(kind == _SingleVal){
-        // for the single value type, need to add a unique identifier
-        current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index);
-
-        // local defined vairable need to increase total_variable_number by 1;
-        total_variable_number++;
-
-        cout << "  @" << *ident + "_" + to_string(local_variable_index) << " = alloc i32\n";
+        cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32\n";
     }else if(kind == _InitList){
-        // for the array type, use the orignal name directly.
-        current_variable_table_location->declared_variables[*ident] = *ident;
-        // 
         ai->EvaluateConstValues();
         int sum = 1;
         for(int i = 0; i < ai->list.size(); ++i){
             sum *= get<int>(ai->list[i]->const_value);
         }
-        //
-        total_variable_number += sum;
+
+        // we have increased total_variabel_number before.
+        total_variable_number += (sum - 1);
         
         // generate IR
-        cout << "  @" << *ident << " = alloc ";
+        cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc ";
         string tmp = "";
         for(int i = ai->list.size() - 1; i >= 0; --i){
             if(i == ai->list.size() - 1){
@@ -460,15 +414,16 @@ void VarDef::GenerateIR(){
     }
     if(init_val){
         init_val->GenerateIR();
+        current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
         if(init_val->kind == InitVal::_Exp){
             // check if the init_val variable is initialized and not temporary variables
             string tmp = *(init_val->varName);
     
             // comes from primaryexp so it must have value or it will exit earlier.
-            cout << "  store " << *(init_val->varName) << ", @" << *ident + "_" + to_string(local_variable_index) << "\n";
-    
-            // initialize it later
-            current_variable_table_location->initialized_variables[*ident] = *ident + "_" + to_string(local_variable_index);
+            cout << "  store " << *(init_val->varName) 
+                 << ", @" 
+                 << current_variable_table_location->initialized_variables[*ident] 
+                 << endl;
         }else if(init_val->kind == InitVal::_Empty){
             // do nothing for the zero initialization.
             cout << endl;
@@ -477,26 +432,8 @@ void VarDef::GenerateIR(){
             // Get the elments
             GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
 
-            // Print _ptr_{temp_count_ptr} for the location of the array.
-            for(int i = 0; i < array_init.size(); ++i) {
-                // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
-                for(int j = 0; j < ai->list.size(); ++j){
-                    total_variable_number++;
-                    if(j == 0){
-                        cout << "  \%ptr_" << temp_count_ptr++ 
-                             << " = getelemptr @" << *ident 
-                             << ", " << array_init[i] << endl;
-                    }else {
-                        cout << "  \%ptr_" << temp_count_ptr 
-                             << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                             << ", " << array_init[i] << endl;
-                        temp_count_ptr++;
-                    }
-                }
-
-                // use the load to get the value out of the array
-                cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
-            }
+            // use store to initialize
+            InitializeLocalList(ai, current_variable_table_location->initialized_variables[*ident]);
 
             cout << endl;
         }
@@ -766,15 +703,39 @@ void PrimaryExp::GenerateIR(){
             assert(false);
         }
         
-        // first frame in stack means the parameters.
-        StackVariable* first_variable_table_location = stack_variable_table[1].get();
-        // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
+        // assign a new temp var
         varName = std::make_unique<string>("%" + to_string(temp_count++));
-        if(first_variable_table_location->declared_variables.count(*(lval->ident))){
-            // %x ,etc,
-            cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] <<endl;
-        }else{
-            cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] <<endl;
+
+
+        if(lval->kind == LVAL::_Ident){
+            // first frame in stack means the parameters.
+            StackVariable* first_variable_table_location = stack_variable_table[1].get();
+            // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
+            if(first_variable_table_location->declared_variables.count(*(lval->ident))){
+                // %x ,etc,
+                cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] << endl;
+            }else{
+                cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] << endl;
+            }
+        }else if(lval->kind == LVAL::_ArrayElement){
+            lval->GenerateIR();
+            // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
+            for(int j = 0; j < lval->ai->list.size(); ++j){
+                total_variable_number++;
+                if(j == 0){
+                    cout << "  \%ptr_" << temp_count_ptr++ 
+                        << " = getelemptr @" << possible_variable_table_location->initialized_variables[*ident]
+                        << ", " << get<int>(lval->ai->list[j]->const_value) << endl;
+                }else {
+                    cout << "  \%ptr_" << temp_count_ptr 
+                        << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                        << ", " << get<int>(lval->ai->list[j]->const_value) << endl;
+                    temp_count_ptr++;
+                }
+        
+                // use the load to get the value out of the array
+                cout <<"  " << *varName << " = "<< "load \%ptr_" << temp_count_ptr - 1 << endl;
+            }
         }
     }
 }
@@ -1247,6 +1208,7 @@ void ConstExp::EvaluateConstValues(){
 
 void LVAL::GenerateIR(){
     // do nothing, just a node to store the value
+    ai->GenerateIR();
 }
 
 
@@ -1352,5 +1314,68 @@ void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const u
     while(inc < start + block_size) {
         inc++;
         array_init.push_back("0");
+    }
+}
+
+void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx){
+    if(depth == limit){
+        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
+        for(int i = 0; i < currentDimensionSize; ++i){
+            if(i == 0){
+                cout << array_init[idx++];
+            }else {
+                cout << ", " << array_init[idx++];
+            }
+        }
+    }else if(depth == 0){
+        cout << "{ ";
+        PrintArrayInitInNestedFormat(ai, 1, limit, idx);
+        cout << " }";
+    }else{
+        int currentDimensionSize = get<int>(ai->list[depth-1]->const_value);
+        for(int i = 0; i < currentDimensionSize; ++i){
+            if(i == 0){
+                cout << "{ ";
+            }else{
+                cout << ", { ";
+            }
+            PrintArrayInitInNestedFormat(ai, depth + 1, limit, idx);
+            cout << " } ";
+        }
+    
+    }
+}
+
+
+void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string & varName){
+    int mul = 1;
+    for(int i = 0; i < ai->list.size(); ++i){
+        mul *= get<int>(ai->list[i]->const_value);
+    }
+    cerr<< mul << endl;
+    // Print _ptr_{temp_count_ptr} for the location of the array.
+    for(int i = 0; i < array_init.size(); ++i) {
+        // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
+        int tmpi = i;
+        int tmpmul = mul;
+        for(int j = 0; j < ai->list.size(); ++j){
+            total_variable_number++;
+            tmpmul =  tmpmul / get<int>(ai->list[j]->const_value);
+            if(j == 0){
+                cout << "  \%ptr_" << temp_count_ptr++ 
+                     << " = getelemptr @" << varName
+                     << ", " << tmpi/tmpmul << endl;
+                tmpi = tmpi % tmpmul;
+            }else {
+                cout << "  \%ptr_" << temp_count_ptr 
+                     << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                     << ", " << tmpi/tmpmul << endl;
+                tmpi = tmpi % tmpmul;
+                temp_count_ptr++;
+            }
+        }
+
+        // use the load to get the value out of the array
+        cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
     }
 }
