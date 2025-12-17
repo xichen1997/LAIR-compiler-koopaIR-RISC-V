@@ -39,7 +39,8 @@ void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_
 void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const unique_ptr<ArrayIndex> &ai, const int dim, const int &idx);
 
 void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx);
-void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string & varName);
+void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string &varName);
+void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName);
 
 using namespace std;
 
@@ -227,6 +228,15 @@ void ConstDef::EvaluateConstValues(){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
         ai->EvaluateConstValues();
+        int sum = 1;
+        for(int i = 0; i < ai->list.size(); ++i){
+            sum *= get<int>(ai->list[i]->const_value);
+        }
+    
+        // we have increased total_variabel_number before.
+        total_variable_number += (sum - 1);
+        
+        // generate IR
         if(is_defining_global_var){
             cout << "global @" << *ident << " = alloc ";
         }else{
@@ -240,6 +250,8 @@ void ConstDef::EvaluateConstValues(){
                 tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
             }
         }
+        cout << tmp << endl;
+        
         if(const_init_val && is_defining_global_var){
             // need to deal with the initialization in the stack memory.
             cout << ", ";
@@ -247,8 +259,6 @@ void ConstDef::EvaluateConstValues(){
             int idx = 0;
             PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
             cout << endl;
-        } else if(!const_init_val){
-            cout << ", zeroinit";
         } else if(const_init_val && !is_defining_global_var){
             // Get the elments
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
@@ -1347,7 +1357,7 @@ void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int de
 }
 
 
-void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string & varName){
+void InitializeLocalList(const unique_ptr<ArrayIndex> &ai, string &varName){
     int mul = 1;
     for(int i = 0; i < ai->list.size(); ++i){
         mul *= get<int>(ai->list[i]->const_value);
@@ -1378,4 +1388,29 @@ void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string & varName){
         // use the load to get the value out of the array
         cout << "  store " << array_init[i] << ", " << "\%ptr_" << temp_count_ptr - 1 << endl; 
     }
+}
+
+
+void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName){
+    ai->EvaluateConstValues();
+    int sum = 1;
+    for(int i = 0; i < ai->list.size(); ++i){
+        sum *= get<int>(ai->list[i]->const_value);
+    }
+
+    // we have increased total_variabel_number before.
+    total_variable_number += (sum - 1);
+    
+    // generate IR
+    cout << "  @" << varName << " = alloc ";
+    string tmp = "";
+    for(int i = ai->list.size() - 1; i >= 0; --i){
+        if(i == ai->list.size() - 1){
+            tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
+        }else{
+            tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
+        }
+    }
+    cout << tmp << endl; 
+    return;
 }
