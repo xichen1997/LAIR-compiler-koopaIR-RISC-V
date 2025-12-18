@@ -872,6 +872,8 @@ InitVal
   | '{' '}'{
     auto ast = new InitVal();
     ast->kind = InitVal::_Empty;
+    auto niv = new NestedInitVal();
+    ast->nested_init_val.reset(niv);
     $$ = ast;
     // cerr << "[AST] Built InitVal at line " << @1.first_line << endl;
   }

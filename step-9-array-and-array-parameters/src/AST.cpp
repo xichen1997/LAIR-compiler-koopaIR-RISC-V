@@ -253,6 +253,7 @@ void ConstDef::EvaluateConstValues(){
             total_variable_number++;
             current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(temp_count++);
             AllocArray(ai, current_variable_table_location->declared_variables[*ident]);
+            cerr << current_variable_table_location->declared_variables[*ident] << endl;
             
             // initialize the variable in the stack memory.
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
@@ -416,6 +417,8 @@ void VarDef::GenerateIR(){
                  << endl;
         }else if(init_val->kind == InitVal::_Empty){
             // do nothing for the zero initialization.
+            GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
+            InitializeLocalList(ai, current_variable_table_location->initialized_variables[*ident]);
             cout << endl;
         }else if(init_val->kind == InitVal::_InitList){
 
@@ -1199,11 +1202,11 @@ void LVAL::GenerateIR(){
             if(j == 0){
                 cout << "  \%ptr_" << temp_count_ptr++ 
                     << " = getelemptr @" << possible_variable_table_location->declared_variables[*ident]
-                    << ", " << get<int>(ai->list[j]->const_value) << endl;
+                    << ", " << *(ai->list[j]->varName) << endl;
             }else {
                 cout << "  \%ptr_" << temp_count_ptr 
                     << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                    << ", " << get<int>(ai->list[j]->const_value) << endl;
+                    << ", " << *(ai->list[j]->varName) << endl;
                 temp_count_ptr++;
             }
         }
@@ -1290,7 +1293,7 @@ void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const u
     if(dim == ai->list.size()){
         // the last dim, should only have the initval
         for(int i = 0; i < nciv->list.size(); ++i){
-            nciv->list[i]->const_exp->GenerateIR();
+            nciv->list[i]->const_exp->EvaluateConstValues();
             array_init.push_back(to_string(get<int>(nciv->list[i]->const_exp->const_value)));
             inc++;
         }
@@ -1299,7 +1302,7 @@ void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const u
         for(int i = 0; i < nciv->list.size(); ++i){
             inc++;
             if(nciv->list[i]->kind == ConstInitVal::_ConstExp){
-                nciv->list[i]->const_exp->GenerateIR();
+                nciv->list[i]->const_exp->EvaluateConstValues();
                 array_init.push_back(to_string(get<int>(nciv->list[i]->const_exp->const_value)));
             }else{
                 if(!nciv->list[i]->nested_const_init_val) {
