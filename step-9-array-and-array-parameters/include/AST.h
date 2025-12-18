@@ -469,6 +469,7 @@ class LVAL : public BaseAST{
         _ArrayElement
     } kind;
     std::unique_ptr<string> ident;
+    std::unique_ptr<string> ptr;
     std::unique_ptr<ArrayIndex> ai;
 
     void GenerateIR() override;

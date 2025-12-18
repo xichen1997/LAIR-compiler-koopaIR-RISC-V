@@ -40,7 +40,7 @@ void GetArrayInitialization(const unique_ptr<NestedConstInitVal> & nciv, const u
 
 void PrintArrayInitInNestedFormat(const unique_ptr<ArrayIndex> &ai, const int depth, const int limit, int &idx);
 void InitializeLocalList(const unique_ptr<ArrayIndex> & ai, string &varName);
-void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName);
+void AllocArray(const unique_ptr<ArrayIndex> &ai, string &varName);
 
 using namespace std;
 
@@ -227,30 +227,7 @@ void ConstDef::EvaluateConstValues(){
     }else if(kind == _Array){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
-        ai->EvaluateConstValues();
-        int sum = 1;
-        for(int i = 0; i < ai->list.size(); ++i){
-            sum *= get<int>(ai->list[i]->const_value);
-        }
-    
-        // we have increased total_variabel_number before.
-        total_variable_number += (sum - 1);
-        
-        // generate IR
-        if(is_defining_global_var){
-            cout << "global @" << *ident << " = alloc ";
-        }else{
-            cout << "  @" << *ident << " = alloc ";
-        }
-        string tmp = "";
-        for(int i = ai->list.size() - 1; i >= 0; --i){
-            if(i == ai->list.size() - 1){
-                tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
-            }else{
-                tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
-            }
-        }
-        cout << tmp << endl;
+        AllocArray(ai, *ident);
         
         if(const_init_val && is_defining_global_var){
             // need to deal with the initialization in the stack memory.
@@ -351,17 +328,7 @@ void VarDef::GenerateIR(){
                 cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
             } 
             else{
-                ai->EvaluateConstValues();
-                cout << "global @" << *ident << " = alloc ";
-                string tmp = "";
-                for(int i = ai->list.size() - 1; i >= 0; --i){
-                    if(i == ai->list.size() - 1){
-                        tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
-                    }else{
-                        tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
-                    }
-                }
-                cout << tmp;
+                AllocArray(ai, *ident);
                 cout << ", ";
                 GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
                 int idx = 0;
@@ -372,17 +339,8 @@ void VarDef::GenerateIR(){
             if(kind == _SingleVal){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
             }else if(kind == _InitList){
-                ai->EvaluateConstValues();
-                cout << "global @" << *ident << " = alloc ";
-                string tmp = "";
-                for(int i = ai->list.size() - 1; i >= 0; --i){
-                    if(i == ai->list.size() - 1){
-                        tmp = "[i32, " + to_string(std::get<int>(ai->list[i]->const_value))+ "]";
-                    }else{
-                        tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
-                    }
-                }
-                cout << tmp << ", zeroinit" << endl;
+                AllocArray(ai, *ident);
+                cout << ", zeroinit" << endl;
             }
         }
         return;
@@ -533,7 +491,12 @@ void Stmt::GenerateIR() {
             assert(false);
         }
         // const value(or Number) or temparory value
-        cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*(lval->ident)] << "\n";
+        if(lval->kind == LVAL::_Ident){
+            cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*(lval->ident)] << endl;
+        }else if(lval->kind == LVAL::_ArrayElement){
+            lval->GenerateIR();
+            cout << "  store " << *(exp->varName) << ", " << *(lval->ptr) << endl;
+        }
         // then it must be initialized variables, can be used in the future.
         possible_variable_table_location->initialized_variables[*(lval->ident)] = possible_variable_table_location->declared_variables[*(lval->ident)];
     } else if(kind == _Return_Exp){
@@ -744,6 +707,7 @@ void PrimaryExp::GenerateIR(){
                 }
         
                 // use the load to get the value out of the array
+                varName.reset(new string("%" + to_string(temp_count++)));
                 cout <<"  " << *varName << " = "<< "load \%ptr_" << temp_count_ptr - 1 << endl;
             }
         }
@@ -1217,8 +1181,24 @@ void ConstExp::EvaluateConstValues(){
 }
 
 void LVAL::GenerateIR(){
-    // do nothing, just a node to store the value
-    ai->GenerateIR();
+    // normally the node should store all the message, but the 
+    if(kind == _ArrayElement){
+        ai->GenerateIR();
+        for(int j = 0; j < ai->list.size(); ++j){
+            total_variable_number++;
+            if(j == 0){
+                cout << "  \%ptr_" << temp_count_ptr++ 
+                    << " = getelemptr @" << *ident
+                    << ", " << get<int>(ai->list[j]->const_value) << endl;
+            }else {
+                cout << "  \%ptr_" << temp_count_ptr 
+                    << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                    << ", " << get<int>(ai->list[j]->const_value) << endl;
+                temp_count_ptr++;
+            }
+        }
+        ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
+    }
 }
 
 
@@ -1391,7 +1371,7 @@ void InitializeLocalList(const unique_ptr<ArrayIndex> &ai, string &varName){
 }
 
 
-void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName){
+void AllocArray(const unique_ptr<ArrayIndex> &ai, string &varName){
     ai->EvaluateConstValues();
     int sum = 1;
     for(int i = 0; i < ai->list.size(); ++i){
@@ -1402,7 +1382,11 @@ void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName){
     total_variable_number += (sum - 1);
     
     // generate IR
-    cout << "  @" << varName << " = alloc ";
+    if(is_defining_global_var){
+        cout << "global @" << varName << " = alloc ";
+    }else{
+        cout << "  @" << varName << " = alloc ";
+    }
     string tmp = "";
     for(int i = ai->list.size() - 1; i >= 0; --i){
         if(i == ai->list.size() - 1){
@@ -1411,6 +1395,6 @@ void AllocLocalArray(const unique_ptr<ArrayIndex> &ai, string &varName){
             tmp = "[" + tmp + ", " + to_string(std::get<int>(ai->list[i]->const_value)) + "]";
         }
     }
-    cout << tmp << endl; 
+    cout << tmp; 
     return;
 }
