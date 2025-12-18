@@ -227,21 +227,41 @@ void ConstDef::EvaluateConstValues(){
     }else if(kind == _Array){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
-        AllocArray(ai, *ident);
-        
+
+        // check duplication.
+        auto current_variable_table_location = stack_variable_table.back().get();
+        if(current_variable_table_location->declared_variables.count(*ident)){
+            cerr << "Error: the variable " << *ident << " is already defined. " << endl;
+            assert(false);
+        }
+
+        // Note if the varname is defined in the stack, the name should be "*ident_" + to_string(temp_count++);
+        // global don't need to count total_variable_number because it's not used inside the stack.
+
         if(const_init_val && is_defining_global_var){
+            AllocArray(ai, *ident);
             // need to deal with the initialization in the stack memory.
+            current_variable_table_location->declared_variables[*ident] = *ident;
             cout << ", ";
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
             int idx = 0;
             PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
+            current_variable_table_location->initialized_variables[*ident] = *ident;
             cout << endl;
         } else if(const_init_val && !is_defining_global_var){
-            // Get the elments
+
+            total_variable_number++;
+            current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(temp_count++);
+            AllocArray(ai, current_variable_table_location->declared_variables[*ident]);
+            
+            // initialize the variable in the stack memory.
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
 
             // Print _ptr_{temp_count_ptr} for the location of the array.
-            InitializeLocalList(ai, *ident);
+            InitializeLocalList(ai, current_variable_table_location->declared_variables[*ident]);
+
+            current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
+
         }
         cout << endl;
     }
@@ -356,6 +376,8 @@ void VarDef::GenerateIR(){
     // declare it here
     current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(local_variable_index++);
     total_variable_number++;
+
+    //single value or initialist
     if(kind == _SingleVal){
         cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32\n";
     }else if(kind == _InitList){
@@ -368,7 +390,7 @@ void VarDef::GenerateIR(){
         // we have increased total_variabel_number before.
         total_variable_number += (sum - 1);
         
-        // generate IR
+        // generate IR, array use itself ident
         cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc ";
         string tmp = "";
         for(int i = ai->list.size() - 1; i >= 0; --i){
@@ -497,8 +519,6 @@ void Stmt::GenerateIR() {
             lval->GenerateIR();
             cout << "  store " << *(exp->varName) << ", " << *(lval->ptr) << endl;
         }
-        // then it must be initialized variables, can be used in the future.
-        possible_variable_table_location->initialized_variables[*(lval->ident)] = possible_variable_table_location->declared_variables[*(lval->ident)];
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         cout << "  ret " << *(exp->varName) << endl;
@@ -691,25 +711,9 @@ void PrimaryExp::GenerateIR(){
                 cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] << endl;
             }
         }else if(lval->kind == LVAL::_ArrayElement){
+            // If this is an arrayElement, we should call lval to extra the ptr and store it in lval
             lval->GenerateIR();
-            // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
-            for(int j = 0; j < lval->ai->list.size(); ++j){
-                total_variable_number++;
-                if(j == 0){
-                    cout << "  \%ptr_" << temp_count_ptr++ 
-                        << " = getelemptr @" << possible_variable_table_location->initialized_variables[*ident]
-                        << ", " << get<int>(lval->ai->list[j]->const_value) << endl;
-                }else {
-                    cout << "  \%ptr_" << temp_count_ptr 
-                        << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                        << ", " << get<int>(lval->ai->list[j]->const_value) << endl;
-                    temp_count_ptr++;
-                }
-        
-                // use the load to get the value out of the array
-                varName.reset(new string("%" + to_string(temp_count++)));
-                cout <<"  " << *varName << " = "<< "load \%ptr_" << temp_count_ptr - 1 << endl;
-            }
+            cout << "  " << *varName << " = " << "load " << *(lval->ptr) << endl;
         }
     }
 }
@@ -1181,14 +1185,20 @@ void ConstExp::EvaluateConstValues(){
 }
 
 void LVAL::GenerateIR(){
-    // normally the node should store all the message, but the 
+    // find the most recent definition:
+    auto possible_variable_table_location = checkIsDeclared(*ident);
+    if(!possible_variable_table_location){
+        cerr << "Error: the " << *ident << " is not declared" << endl;
+        assert(false);
+    }
+
     if(kind == _ArrayElement){
         ai->GenerateIR();
         for(int j = 0; j < ai->list.size(); ++j){
             total_variable_number++;
             if(j == 0){
                 cout << "  \%ptr_" << temp_count_ptr++ 
-                    << " = getelemptr @" << *ident
+                    << " = getelemptr @" << possible_variable_table_location->declared_variables[*ident]
                     << ", " << get<int>(ai->list[j]->const_value) << endl;
             }else {
                 cout << "  \%ptr_" << temp_count_ptr 
