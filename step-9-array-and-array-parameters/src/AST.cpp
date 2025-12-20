@@ -5,6 +5,8 @@ struct StackVariable{
     unordered_map<string, int> const_variable_table;
     unordered_map<string, string> initialized_variables;
     unordered_map<string, string> declared_variables;
+    unordered_set<string> is_func_params_array;
+    unordered_map<string, int> array_dims;
 } stackVariable;
 
 bool is_defining_global_var = false;
@@ -128,9 +130,43 @@ void FuncDef::GenerateIR() {
     // Implementation for IR generation would go here
     cout << "fun @" << *ident << "(";
     if(funcfparams != nullptr){
-        cout << "@" << *(funcfparams->list[0]->ident) << ": i32";
+        if(funcfparams->list[0]->kind == FuncFParam::_Single){
+            cout << "@" << *(funcfparams->list[0]->ident) << ": i32";
+        }else{
+            auto &api = funcfparams->list[0]->array_ptr_index;
+            if(api->list.size() == 0){
+                cout << "@" << *(funcfparams->list[0]->ident) << ": *i32";
+            }else{
+                api->GenerateIR();
+                cout << "@" << *(funcfparams->list[0]->ident) << ": *";
+                for(int i = 0; i < api->list.size(); ++i) {
+                    cout << "[";
+                }
+                cout << "i32";
+                for(int i = api->list.size() - 1; i >= 0; --i){
+                    cout <<", " << get<int>(api->list[i]->const_value) << "]";
+                }
+            }
+        }
         for(int i = 1; i < funcfparams->list.size(); ++i) {
-            cout << ", @" << *(funcfparams->list[i]->ident) << ": i32";
+            if(funcfparams->list[i]->kind == FuncFParam::_Single){
+                cout << ", @" << *(funcfparams->list[i]->ident) << ": i32";
+            }else{
+                auto &api = funcfparams->list[i]->array_ptr_index;
+                if(api->list.size() == 0){
+                    cout << "@" << *(funcfparams->list[i]->ident) << ": *i32";
+                }else{
+                    api->GenerateIR();
+                    cout << "*";
+                    for(int i = 0; i < api->list.size(); ++i) {
+                        cout << "[";
+                    }
+                    cout << "i32";
+                    for(int i = api->list.size() - 1; i >= 0; --i){
+                        cout <<", " << get<int>(api->list[i]->const_value) << "]";
+                    }
+                }
+            }
         }
         total_variable_number += funcfparams->list.size(); // parameters temporary variables.
     }
@@ -175,14 +211,39 @@ void FuncFParams::GenerateIR(){
 
 void FuncFParam::GenerateIR(){
     total_variable_number++; // still need to add one because we apply for a new temporary vairable.
-    StackVariable* current_variable_table_location = stack_variable_table.back().get();
-    cout << "  %" << *ident << " = alloc i32" << endl;
-    current_variable_table_location->declared_variables[*ident] = *ident;
-    current_variable_table_location->initialized_variables[*ident] = *ident;
-    cout << "  store @" << *ident << ", %" << *ident << endl;
-    varName = std::make_unique<string>("\%" + *ident);
-    // varName =  std::make_unique<string>("\%" + to_string(temp_count++));
-    // cout << "  " << *varName  << " = load %" << *ident << endl;  
+    if(kind == _Single){
+        StackVariable* current_variable_table_location = stack_variable_table.back().get();
+        cout << "  %" << *ident << " = alloc i32" << endl;
+        current_variable_table_location->declared_variables[*ident] = *ident;
+        current_variable_table_location->initialized_variables[*ident] = *ident;
+        cout << "  store @" << *ident << ", %" << *ident << endl;
+        varName = std::make_unique<string>("\%" + *ident);
+    }else if(kind == _Array){
+        array_ptr_index->GenerateIR();
+        StackVariable* current_variable_table_location = stack_variable_table.back().get();
+        current_variable_table_location->declared_variables[*ident] = *ident;
+        current_variable_table_location->initialized_variables[*ident] = *ident;
+        current_variable_table_location->is_func_params_array.insert(*ident);
+        current_variable_table_location->array_dims[*ident] = array_ptr_index->list.size() + 1;
+        cout << "  %" << *ident << " = alloc "; 
+
+        // for the 1D array, pass a ptr.
+        // for the nD array, pass a pointer to n-1 D array.
+        if(array_ptr_index->list.size() == 0){
+            cout << "*i32" << endl;
+        }else{
+            cout << "*";
+            for(int i = 0; i < array_ptr_index->list.size(); ++i){
+                cout <<"[";
+            }
+            cout << "i32";
+            for(int i = array_ptr_index->list.size() - 1; i >=0; --i){
+                cout << ", " << get<int>(array_ptr_index->list[i]->const_value) << "]";
+            }
+            cout << endl;
+        }
+        cout << "  store @" << *ident << ", %" << *ident << endl;
+    }
 }
 
 void Decl::GenerateIR(){
@@ -247,6 +308,7 @@ void ConstDef::EvaluateConstValues(){
             int idx = 0;
             PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
             current_variable_table_location->initialized_variables[*ident] = *ident;
+            current_variable_table_location->array_dims[*ident] = ai->list.size();
             cout << endl;
         } else if(const_init_val && !is_defining_global_var){
 
@@ -262,7 +324,7 @@ void ConstDef::EvaluateConstValues(){
             InitializeLocalList(ai, current_variable_table_location->declared_variables[*ident]);
 
             current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
-
+            current_variable_table_location->array_dims[*ident] = ai->list.size();
         }
         cout << endl;
     }
@@ -285,6 +347,18 @@ void ArrayIndex::GenerateIR(){
     for(int i = 0; i < list.size(); ++i){
         // exp generate their IR.
         list[i]->GenerateIR();
+    }
+}
+
+void ArrayPtrIndex::EvaluateConstValues(){
+    for(int i = 0; i < list.size(); ++i){
+        list[i]->EvaluateConstValues();
+    }
+}
+
+void ArrayPtrIndex::GenerateIR(){
+    for(int i = 0; i < list.size(); ++i){
+        list[i]->EvaluateConstValues();
     }
 }
 
@@ -354,6 +428,7 @@ void VarDef::GenerateIR(){
                 GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
                 int idx = 0;
                 PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
+                current_variable_table_location->array_dims[*ident] = ai->list.size();
                 cout << endl;
             }
         }else{
@@ -361,6 +436,7 @@ void VarDef::GenerateIR(){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
             }else if(kind == _InitList){
                 AllocArray(ai, *ident);
+                current_variable_table_location->array_dims[*ident] = ai->list.size();
                 cout << ", zeroinit" << endl;
             }
         }
@@ -382,6 +458,10 @@ void VarDef::GenerateIR(){
     if(kind == _SingleVal){
         cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32\n";
     }else if(kind == _InitList){
+        // The array need to be defined initliazed because we can initialize it later use assgining value.
+        current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
+        
+        
         ai->EvaluateConstValues();
         int sum = 1;
         for(int i = 0; i < ai->list.size(); ++i){
@@ -419,6 +499,7 @@ void VarDef::GenerateIR(){
             // do nothing for the zero initialization.
             GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
             InitializeLocalList(ai, current_variable_table_location->initialized_variables[*ident]);
+            current_variable_table_location->array_dims[*ident] = ai->list.size();
             cout << endl;
         }else if(init_val->kind == InitVal::_InitList){
 
@@ -427,6 +508,8 @@ void VarDef::GenerateIR(){
 
             // use store to initialize
             InitializeLocalList(ai, current_variable_table_location->initialized_variables[*ident]);
+
+            current_variable_table_location->array_dims[*ident] = ai->list.size();
 
             cout << endl;
         }
@@ -716,7 +799,15 @@ void PrimaryExp::GenerateIR(){
         }else if(lval->kind == LVAL::_ArrayElement){
             // If this is an arrayElement, we should call lval to extra the ptr and store it in lval
             lval->GenerateIR();
-            cout << "  " << *varName << " = " << "load " << *(lval->ptr) << endl;
+            if(lval->ai->list.size() == possible_variable_table_location->array_dims[*(lval->ident)]){
+                // pass a value
+                cout << "  " << *varName << " = " << "load " << *(lval->ptr) << endl;
+            }else{
+            cerr << "ai_list_size: " << lval->ai->list.size() << endl;
+            cerr << "array_dims: " << possible_variable_table_location->array_dims[*(lval->ident)] << endl;
+            // else it will be a ptr, then nothing need to be done here.
+            varName = make_unique<string>(*(lval->ptr));
+            }
         }
     }
 }
@@ -1196,21 +1287,62 @@ void LVAL::GenerateIR(){
     }
 
     if(kind == _ArrayElement){
-        ai->GenerateIR();
-        for(int j = 0; j < ai->list.size(); ++j){
-            total_variable_number++;
-            if(j == 0){
-                cout << "  \%ptr_" << temp_count_ptr++ 
-                    << " = getelemptr @" << possible_variable_table_location->declared_variables[*ident]
-                    << ", " << *(ai->list[j]->varName) << endl;
-            }else {
-                cout << "  \%ptr_" << temp_count_ptr 
+        // need to judge if this is array or array pointer.
+        auto first_variable_table_location = stack_variable_table[1].get();
+        if(!first_variable_table_location->is_func_params_array.count(*ident)){
+            ai->GenerateIR();
+            for(int j = 0; j < ai->list.size(); ++j){
+                total_variable_number++;
+                if(j == 0){
+                    cout << "  \%ptr_" << temp_count_ptr++ 
+                        << " = getelemptr @" << possible_variable_table_location->declared_variables[*ident]
+                        << ", " << *(ai->list[j]->varName) << endl;
+                }else {
+                    cout << "  \%ptr_" << temp_count_ptr 
+                        << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                        << ", " << *(ai->list[j]->varName) << endl;
+                    temp_count_ptr++;
+                }
+            }
+            ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
+        }else{
+            ai->GenerateIR();
+            // need to transform the function parameters type use getptr to get first dimension.
+
+                // use getelemptr to get the correct pointer.
+            for(int j = 0; j < ai->list.size(); ++j){
+                total_variable_number++;
+                if(j == 0){
+                    cout << "  \%ptr_" << temp_count_ptr++ <<" = load \%" << *ident << endl; 
+                    cout << "  \%ptr_" << temp_count_ptr++ 
+                                << " = getptr \%ptr_" << temp_count_ptr - 2
+                                << ", " << *(ai->list[0]->varName) << endl;
+                }else {
+                    cout << "  \%ptr_" << temp_count_ptr 
                     << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
                     << ", " << *(ai->list[j]->varName) << endl;
+                    temp_count_ptr++;
+                }
+            }
+            if(first_variable_table_location->array_dims[*ident] - ai->list.size() == 1){
+                cout << "  \%ptr_" << temp_count_ptr 
+                    << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+                    << ", " << "0" << endl;
+                
+                total_variable_number++;
                 temp_count_ptr++;
             }
+
+            // }else{
+            //     // when the ai->list.size() == 0, need to convert the from type *[i32, n] to *i32
+            //     total_variable_number++;
+            //     cout << "  \%ptr_" << temp_count_ptr 
+            //     << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
+            //     << ", " << "0" << endl;
+            //     temp_count_ptr++;
+            // }
+            ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
         }
-        ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
     }
 }
 

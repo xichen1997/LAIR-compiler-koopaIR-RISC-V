@@ -25,6 +25,7 @@ class CompUnitItem;
 class FuncDef;
 class FuncType;
 class FuncFParam;
+class ArrayPtrIndex;
 class FuncFParams;
 class FuncRParams;
 class FuncDefList;  
@@ -131,11 +132,24 @@ class FuncFParams : public BaseAST{
 
 class FuncFParam : public BaseAST{
     public:
+    enum Kind{
+        _Single,
+        _Array
+    } kind;
     std::unique_ptr<string> type;
     std::unique_ptr<string> ident;
     std::unique_ptr<string> varName;
+    std::unique_ptr<ArrayPtrIndex> array_ptr_index;
 
     void GenerateIR() override;
+};
+
+class ArrayPtrIndex : public BaseAST{
+    public:
+    std::vector<std::unique_ptr<ConstExp>> list;
+
+    void GenerateIR() override;
+    void EvaluateConstValues();
 };
 
 class BlockItemList : public BaseAST{

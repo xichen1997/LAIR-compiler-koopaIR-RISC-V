@@ -56,7 +56,7 @@ using namespace std;
 // 定义运算相关
 %type <ast_val> Decl FuncDef Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
 // 定义变量常量
-%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal NestedConstInitVal VarDecl VarDefList VarDef InitVal NestedInitVal FuncFParams FuncFParam FuncRParams LVAL ArrayIndex
+%type <ast_val> ConstDecl ConstDefList ConstDef ConstInitVal NestedConstInitVal VarDecl VarDefList VarDef InitVal NestedInitVal FuncFParams FuncFParam FuncRParams LVAL ArrayIndex ArrayPtrIndex
 // 接近于终结符，但是可以有多种表示形式，比如各种运算
 %type <str_val> UnaryOp MulOp AddOp RelOp EqOp LAndOp LOrOp BType
 
@@ -228,8 +228,36 @@ FuncFParam
   : BType IDENT{
     auto ast = new FuncFParam();
     ast->type.reset($1);
+    ast->kind = FuncFParam::_Single;
     ast->ident.reset($2);
-    // cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
+    cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
+    $$ = ast;
+  }
+  | BType IDENT ArrayPtrIndex {
+    auto ast = new FuncFParam();
+    ast->type.reset($1);
+    ast->kind = FuncFParam::_Array;
+    ast->ident.reset($2);
+    auto api = dynamic_cast<ArrayPtrIndex*>($3);
+    ast->array_ptr_index.reset(api);
+    cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
+    $$ = ast;
+  } 
+  ;
+
+ArrayPtrIndex
+  : '[' ']'{
+    auto ast = new ArrayPtrIndex();
+    ast->lineno = @1.first_line;
+    cerr << "[AST] Built ArrayPtrIndex at line " << @1.first_line << endl;
+    $$ = ast;
+  }
+  | ArrayPtrIndex '[' ConstExp ']'{
+    auto ast = new ArrayPtrIndex();
+    auto const_exp = dynamic_cast<ConstExp*>($3);
+    ast->list.emplace_back(const_exp);
+    ast->lineno = @1.first_line;
+    cerr << "[AST] Built ArrayPtrIndex at line " << @1.first_line << endl;
     $$ = ast;
   }
   ;

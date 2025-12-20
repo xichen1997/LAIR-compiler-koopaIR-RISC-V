@@ -1,11 +1,20 @@
-int main() {
-  int arr[10] = {1, 2, 3, 4, 5};
+void f1d(int arr[]) {
   int i = 0;
   while (i < 10) {
-    int x[10] = {};
-    arr[i] = arr[i] + i + x[i];
-    x[i] = arr[i];
+    arr[i] = i;
     i = i + 1;
   }
-  return arr[9];
+}
+
+void f2d(int arr[][8 + 2]) {
+  arr[1][2] = 3;
+  int i = 0;
+  while (i < 10) {
+    f1d(arr[i]);
+    i = i + 1;
+  }
+}
+
+int main() {
+  return 33;
 }
