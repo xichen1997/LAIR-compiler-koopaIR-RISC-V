@@ -201,6 +201,11 @@ void FuncRParams::GenerateIR() {
     // will generate the temorary var
     for(int i = 0; i < list.size(); ++i){
         list[i]->GenerateIR(); // exp->generateIR(); which will generate the tempvar
+        cerr << "list[i]->type: " << list[i]->type->kind << endl;
+        cerr << *(list[i]->varName) << endl;
+        if(list[i]->type->kind == Type::Array){
+            cout << "  \%" << temp_count++ << " = getelemeptr " << *(list[i]->varName) <<", 0" << endl; 
+        }
     }
 } 
 
@@ -668,6 +673,8 @@ void Stmt::GenerateIR() {
 
         // const value(or Number) or temparory value
         lval->GenerateIR();
+        cerr << "lval->ptr: "<< lval->ptr << endl;
+
         cout << "  store " << *(exp->varName) << ", " << (lval->ptr) << endl;
 
     } else if(kind == _Return_Exp){
@@ -808,14 +815,14 @@ void Exp::GenerateIR() {
     // Implementation for IR generation would go here
     lor_exp->GenerateIR();
     varName = std::make_unique<string>(*(lor_exp->varName));
-    type = Type::IntTy();
+    type = lor_exp->type;
 }
 
 void Exp::EvaluateConstValues(){
     lor_exp->EvaluateConstValues();
     const_value = lor_exp->const_value;
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
-    type = Type::IntTy();
+    type = lor_exp->type;
 }
 
 void PrimaryExp::GenerateIR(){
@@ -846,11 +853,11 @@ void PrimaryExp::GenerateIR(){
         }
 
         // is initialized?
-        possible_variable_table_location = checkIsInitialized(*(lval->ident)); 
-        if(possible_variable_table_location == nullptr){
-            cerr << "Error: variable '" << *(lval->ident) << "' is not initiailized" << endl;
-            assert(false);
-        }
+        // possible_variable_table_location = checkIsInitialized(*(lval->ident)); 
+        // if(possible_variable_table_location == nullptr){
+        //     cerr << "Error: variable '" << *(lval->ident) << "' is not initiailized" << endl;
+        //     assert(false);
+        // }
         
         // assign a new temp var
         varName = std::make_unique<string>("%" + to_string(temp_count++));
@@ -870,7 +877,7 @@ void PrimaryExp::EvaluateConstValues(){
     if(kind == _Exp){
         exp->EvaluateConstValues();
         const_value = exp->const_value;
-        type = Type::IntTy();
+        type = exp->type;
     } else if(kind == _Number){
         const_value = number->int_const;
         type = Type::IntTy();
@@ -882,7 +889,7 @@ void PrimaryExp::EvaluateConstValues(){
             assert(false);
         }
         const_value = possible_variable_table_location->const_variable_table[*(lval->ident)];
-        type = Type::IntTy();
+        type = lval->type;
     } else{
         // give error information
         cerr << "Error: Invalid PrimaryExp kind for EvaluateConstValues" << endl;
@@ -896,8 +903,9 @@ void UnaryExp::GenerateIR(){
     if(kind == _PrimaryExp){
         primary_exp->GenerateIR();
         varName = std::make_unique<string>(*(primary_exp->varName));
+        type = primary_exp->type;
     } else if(kind == _UnaryOp_UnaryExp){
-
+        type = Type::IntTy();
         unary_exp->GenerateIR();
         varName = std::make_unique<string>("\%" + to_string(temp_count++));
         cout << "  " << *varName << " = ";
@@ -909,7 +917,6 @@ void UnaryExp::GenerateIR(){
         } else if(unary_op->compare("+") == 0){
             cout << "add 0, " << *(unary_exp->varName) << endl;
         }
-        type = Type::IntTy();
     } else if(kind == _Func_No_Params){
         // call function  
         // need to calculate the max_parameters_number
@@ -947,7 +954,9 @@ void UnaryExp::EvaluateConstValues(){
     if(kind == _PrimaryExp){
         primary_exp->EvaluateConstValues();
         const_value = primary_exp->const_value;
+        type = primary_exp->type;
     } else if(kind == _UnaryOp_UnaryExp){
+        type = Type::IntTy();
         unary_exp->EvaluateConstValues();
         int val = std::get<int>(unary_exp->const_value);
         if(unary_op->compare("+") == 0){
@@ -962,7 +971,6 @@ void UnaryExp::EvaluateConstValues(){
         cerr << "Error: Invalid UnaryExp kind for EvaluateConstValues" << endl;
         assert(false);
     }
-    type = Type::IntTy();
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
 }
 
@@ -972,8 +980,10 @@ void MulExp::GenerateIR() {
     if(kind == _UnaryExp){
         unary_exp->GenerateIR();
         varName = make_unique<string>(*(unary_exp->varName));
+        type = unary_exp->type;
     }
     else if(kind == _MulExp_MulOp_UnaryExp){
+        type = Type::IntTy();
         mul_exp->GenerateIR();
         unary_exp->GenerateIR();
 
@@ -992,15 +1002,16 @@ void MulExp::GenerateIR() {
             assert(false);
         }
     }
-    type = Type::IntTy();
 }
 
 void MulExp::EvaluateConstValues(){
     if(kind == _UnaryExp){
         unary_exp->EvaluateConstValues();
         const_value = unary_exp->const_value;
+        type = unary_exp->type;
     }
     else if(kind == _MulExp_MulOp_UnaryExp){
+        type = Type::IntTy();
         mul_exp->EvaluateConstValues();
         unary_exp->EvaluateConstValues();
 
@@ -1018,7 +1029,6 @@ void MulExp::EvaluateConstValues(){
             assert(false);
         }
     }
-    type = Type::IntTy();
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
 }
 
@@ -1027,7 +1037,9 @@ void AddExp::GenerateIR(){
     if(kind == _MulExp){
         mul_exp->GenerateIR();
         varName = make_unique<string>(*(mul_exp->varName));
+        type = mul_exp->type;
     }else if(kind == _AddExp_AddOp_MulExp){
+        type = Type::IntTy();
         add_exp->GenerateIR();
         mul_exp->GenerateIR();
 
@@ -1043,7 +1055,6 @@ void AddExp::GenerateIR(){
             assert(false);
         }
     }
-    type = Type::IntTy();
 }
 
 void AddExp::EvaluateConstValues(){
@@ -1051,7 +1062,9 @@ void AddExp::EvaluateConstValues(){
         mul_exp->EvaluateConstValues();
         const_value = mul_exp->const_value;
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
+        type = mul_exp->type;
     }else if(kind == _AddExp_AddOp_MulExp){
+        type = Type::IntTy();
         add_exp->EvaluateConstValues();
         mul_exp->EvaluateConstValues();
 
@@ -1068,14 +1081,15 @@ void AddExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
-    type = Type::IntTy();
 }
 
 void RelExp::GenerateIR(){
     if(kind == _AddExp){
         add_exp->GenerateIR();
         varName = make_unique<string>(*(add_exp->varName));
+        type = add_exp->type;
     }else if(kind == _RelExp_RelOp_AddExp){
+        type = Type::IntTy();
         rel_exp->GenerateIR();
         add_exp->GenerateIR();
 
@@ -1095,7 +1109,6 @@ void RelExp::GenerateIR(){
             assert(false);
         }
     }
-    type = Type::IntTy();
 }
 
 void RelExp::EvaluateConstValues(){
@@ -1103,7 +1116,9 @@ void RelExp::EvaluateConstValues(){
         add_exp->EvaluateConstValues();
         const_value = add_exp->const_value;
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
+        type = add_exp->type;
     }else if(kind == _RelExp_RelOp_AddExp){
+        type = Type::IntTy();
         rel_exp->EvaluateConstValues();
         add_exp->EvaluateConstValues();
 
@@ -1124,14 +1139,15 @@ void RelExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
-    type = Type::IntTy();
 }
 
 void EqExp::GenerateIR(){
     if(kind == _RelExp){
         rel_exp->GenerateIR();
         varName = make_unique<string>(*(rel_exp->varName));
+        type = Type::IntTy();
     }else if(kind == _EqExp_EqOp_RelExp){
+        type = rel_exp->type;
         eq_exp->GenerateIR();
         rel_exp->GenerateIR();
 
@@ -1147,7 +1163,6 @@ void EqExp::GenerateIR(){
             assert(false);
         }
     }
-    type = Type::IntTy();
 }
 
 void EqExp::EvaluateConstValues(){
@@ -1155,7 +1170,9 @@ void EqExp::EvaluateConstValues(){
         rel_exp->EvaluateConstValues();
         const_value = rel_exp->const_value;
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
+        type = rel_exp->type;
     }else if(kind == _EqExp_EqOp_RelExp){
+        type = Type::IntTy();
         eq_exp->EvaluateConstValues();
         rel_exp->EvaluateConstValues();
 
@@ -1172,7 +1189,6 @@ void EqExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
-    type = Type::IntTy();
 }
 
 
@@ -1181,8 +1197,10 @@ void LAndExp::GenerateIR(){
     if(kind == _EqExp){
         eq_exp->GenerateIR();
         varName = make_unique<string>(*(eq_exp->varName));
+        type = eq_exp->type;
     }else if(kind == _LAndExp_LAndOp_EqExp){
         // increase the index 
+        type = Type::IntTy();
         total_variable_number++;
         total_variable_number++;
         total_variable_number++;
@@ -1232,7 +1250,6 @@ void LAndExp::GenerateIR(){
             assert(false);
         }
     }
-    type = Type::IntTy();
 }
 
 void LAndExp::EvaluateConstValues(){
@@ -1240,7 +1257,9 @@ void LAndExp::EvaluateConstValues(){
         eq_exp->EvaluateConstValues();
         const_value = eq_exp->const_value;
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
+        type = eq_exp->type;
     }else if(kind == _LAndExp_LAndOp_EqExp){
+        type = Type::IntTy();
         land_exp->EvaluateConstValues();
         eq_exp->EvaluateConstValues();
 
@@ -1255,7 +1274,6 @@ void LAndExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
-    type = Type::IntTy();
 }
 
 
@@ -1263,12 +1281,14 @@ void LOrExp::GenerateIR(){
     if(kind == _LAndExp){
         land_exp->GenerateIR();
         varName = make_unique<string>(*(land_exp->varName));
+        type = land_exp->type;
     }else if(kind == _LOrExp_LOrOp_LAndExp){
         // increase index
         int id = logic_operator_index++;
         total_variable_number++;
         total_variable_number++;
         total_variable_number++;
+        type = Type::IntTy();
         if(lor_op->compare("||") == 0){
             // naming for variables
             auto endLabel = "\%logic_end_" + to_string(id);
@@ -1313,7 +1333,7 @@ void LOrExp::GenerateIR(){
             assert(false);
         }
     }
-    type = Type::IntTy();
+
 }
 
 void LOrExp::EvaluateConstValues(){
@@ -1321,7 +1341,9 @@ void LOrExp::EvaluateConstValues(){
         land_exp->EvaluateConstValues();
         const_value = land_exp->const_value;
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
+        type = land_exp->type;
     }else if(kind == _LOrExp_LOrOp_LAndExp){
+        type = Type::IntTy();
         lor_exp->EvaluateConstValues();
         land_exp->EvaluateConstValues();
 
@@ -1336,7 +1358,6 @@ void LOrExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
-    type = Type::IntTy();
 }
 
 
@@ -1366,9 +1387,9 @@ void LVAL::GenerateIR(){
     string curVarName;
     StackVariable* first_variable_table_location = stack_variable_table[1].get();
     if(first_variable_table_location == possible_variable_table_location){
-        curVarName = "\%" + possible_variable_table_location->initialized_variables[*ident];
+        curVarName = "\%" + possible_variable_table_location->declared_variables[*ident];
     }else{
-        curVarName = "@" + possible_variable_table_location->initialized_variables[*ident];
+        curVarName = "@" + possible_variable_table_location->declared_variables[*ident];
     }
 
     // early return if the ai is none, the type won't change.
@@ -1380,7 +1401,6 @@ void LVAL::GenerateIR(){
 
     for (int i = 0; i < ai->list.size(); i++) {
         ai->list[i]->GenerateIR();  // get the index varName
-
         if (currentType->kind == Type::Pointer) {
             // p[i]
             cout << "  \%ptr_" << temp_count_ptr++ 
@@ -1388,7 +1408,7 @@ void LVAL::GenerateIR(){
                  << curVarName 
                  << endl;
             cout << "  \%ptr_" << temp_count_ptr++ 
-                 << " = getptr " << temp_count_ptr - 2 
+                 << " = getptr \%ptr_" << temp_count_ptr - 2 
                  << ", " 
                  << *(ai->list[i]->varName) 
                  << endl;
