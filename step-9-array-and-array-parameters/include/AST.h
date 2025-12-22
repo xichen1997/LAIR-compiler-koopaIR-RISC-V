@@ -250,7 +250,8 @@ class Stmt : public BaseAST{
         _If_Stmt_Else_Stmt,
         _While_Stmt,
         _Break,
-        _Continue
+        _Continue,
+        _Return
     }kind;
     std::unique_ptr<Exp> exp;
     std::unique_ptr<LVAL> lval;

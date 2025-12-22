@@ -328,22 +328,20 @@ void ConstDef::EvaluateConstValues(){
         current_variable_table_location->var_types[*ident] = t;
 
         if(const_init_val && is_defining_global_var){
-            AllocArray(ai, *ident);
             // need to deal with the initialization in the stack memory.
-            current_variable_table_location->declared_variables[*ident] = *ident;
+            current_variable_table_location->declared_variables[*ident] = "g_" + *ident;
+            AllocArray(ai, current_variable_table_location->declared_variables[*ident]);
             cout << ", ";
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
             int idx = 0;
             PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
-            current_variable_table_location->initialized_variables[*ident] = *ident;
-            current_variable_table_location->array_dims[*ident] = ai->list.size();
+            current_variable_table_location->initialized_variables[*ident] = "g_" + *ident;
             cout << endl;
         } else if(const_init_val && !is_defining_global_var){
 
             total_variable_number++;
             current_variable_table_location->declared_variables[*ident] = *ident + "_" + to_string(temp_count++);
             AllocArray(ai, current_variable_table_location->declared_variables[*ident]);
-            cerr << current_variable_table_location->declared_variables[*ident] << endl;
             
             // initialize the variable in the stack memory.
             GetArrayInitialization(const_init_val->nested_const_init_val, ai, 0, 0);
@@ -352,7 +350,6 @@ void ConstDef::EvaluateConstValues(){
             InitializeLocalList(ai, current_variable_table_location->declared_variables[*ident]);
 
             current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
-            current_variable_table_location->array_dims[*ident] = ai->list.size();
         }
         cout << endl;
     }
@@ -435,10 +432,10 @@ void VarDef::GenerateIR(){
             assert(false);
         }
         // use the name directly as the name of the global var
-        current_variable_table_location->declared_variables[*ident] = *ident; 
+        current_variable_table_location->declared_variables[*ident] = "g_" + *ident; 
 
         // it must be defined because it's global
-        current_variable_table_location->initialized_variables[*ident] = *ident;
+        current_variable_table_location->initialized_variables[*ident] = "g_" + *ident;
         if(init_val){
             // visit sub AST to get value
             init_val->GenerateIR();
@@ -446,15 +443,15 @@ void VarDef::GenerateIR(){
             // Exp empty or InitList
             if(init_val->kind == InitVal::_Exp){
                 string tmp = *(init_val->varName);
-                cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
+                cout << "global @" << current_variable_table_location->initialized_variables[*ident] << " = alloc i32, " << tmp << endl; 
                 current_variable_table_location->var_types[*ident] = Type::IntTy();
             }else if(init_val->kind == InitVal::_Empty){
                 // zero init
-                cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
+                cout << "global @" << current_variable_table_location->initialized_variables[*ident] << " = alloc i32, zeroinit" << endl; 
                 current_variable_table_location->var_types[*ident] = Type::IntTy();
             } 
             else{
-                AllocArray(ai, *ident);
+                AllocArray(ai, current_variable_table_location->initialized_variables[*ident]);
                 cout << ", ";
                 GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
                 int idx = 0;
@@ -471,11 +468,11 @@ void VarDef::GenerateIR(){
             }
         }else{
             if(kind == _SingleVal){
-                cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
+                cout << "global @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32, zeroinit"  << endl; 
                 current_variable_table_location->var_types[*ident] = Type::IntTy();
             }else if(kind == _InitList){
-                AllocArray(ai, *ident);
-                current_variable_table_location->array_dims[*ident] = ai->list.size();
+                AllocArray(ai, current_variable_table_location->initialized_variables[*ident]);
+                
                 cout << ", zeroinit" << endl;
 
                 // define the array
@@ -804,6 +801,9 @@ void Stmt::GenerateIR() {
 
         cout << "  jump " << while_entry_name << endl;
         cout << endl;
+    } else if(kind == _Return){
+        cout << "  ret " << endl;
+        has_return = true;
     }
 }
 

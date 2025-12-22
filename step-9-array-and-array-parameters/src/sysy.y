@@ -575,6 +575,12 @@ Stmt
     $$ = ast;
     // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
   }
+  | RETURN {
+    auto ast = new Stmt();
+    ast->kind = Stmt::_Return;
+    $$ = ast;
+    // cerr << "[AST] Built Stmt at line " << @1.first_line << endl;
+  }
   ;
 
 Number
