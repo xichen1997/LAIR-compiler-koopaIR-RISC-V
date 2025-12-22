@@ -200,15 +200,17 @@ void FuncDef::GenerateIR() {
 
 void FuncRParams::GenerateIR() {
     // will generate the temorary var
+    // is_function_params = true;
     for(int i = 0; i < list.size(); ++i){
         list[i]->GenerateIR(); // exp->generateIR(); which will generate the tempvar
         // cerr << "varName: " << *(list[i]->varName) << endl;
         // cerr << "type: " << list[i]->type->kind << endl;
-        if(list[i]->type->kind == Type::Array){
+        if(list[i]->type && list[i]->type->kind == Type::Array){
             cout << "  \%" << temp_count++ << " = getelemptr " << *(list[i]->varName) <<", 0" << endl; 
             list[i]->varName.reset(new std::string("%" + std::to_string(temp_count - 1)));
         }
     }
+    // is_function_params = false;
 } 
 
 void FuncFParams::GenerateIR(){
@@ -1495,7 +1497,7 @@ void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_
     if(dim == ai->list.size()){
         // the last dim, should only have the initval
         for(int i = 0; i < niv->list.size(); ++i){
-            niv->list[i]->exp->GenerateIR();
+            niv->list[i]->exp->EvaluateConstValues();
             array_init.push_back(*(niv->list[i]->exp->varName));
             inc++;
         }
@@ -1504,7 +1506,7 @@ void GetArrayInitialization(const unique_ptr<NestedInitVal> & niv, const unique_
         for(int i = 0; i < niv->list.size(); ++i){
             inc++;
             if(niv->list[i]->kind == InitVal::_Exp){
-                niv->list[i]->exp->GenerateIR();
+                niv->list[i]->exp->EvaluateConstValues();
                 array_init.push_back(*(niv->list[i]->exp->varName));
             }else{
                 if(!niv->list[i]->nested_init_val) {
