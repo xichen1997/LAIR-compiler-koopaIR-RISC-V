@@ -253,12 +253,12 @@ ArrayPtrIndex
     $$ = ast;
   }
   | ArrayPtrIndex '[' ConstExp ']'{
-    auto ast = new ArrayPtrIndex();
+    auto api = dynamic_cast<ArrayPtrIndex*>($1);
     auto const_exp = dynamic_cast<ConstExp*>($3);
-    ast->list.emplace_back(const_exp);
-    ast->lineno = @1.first_line;
+    api->list.emplace_back(const_exp);
+    api->lineno = @1.first_line;
     cerr << "[AST] Built ArrayPtrIndex at line " << @1.first_line << endl;
-    $$ = ast;
+    $$ = api;
   }
   ;
 

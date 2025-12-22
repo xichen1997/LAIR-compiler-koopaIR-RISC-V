@@ -138,8 +138,8 @@ void FuncDef::GenerateIR() {
             if(api->list.size() == 0){
                 cout << "@" << *(funcfparams->list[0]->ident) << ": *i32";
             }else{
-                api->GenerateIR();
                 cout << "@" << *(funcfparams->list[0]->ident) << ": *";
+                api->GenerateIR();
                 for(int i = 0; i < api->list.size(); ++i) {
                     cout << "[";
                 }
@@ -155,8 +155,9 @@ void FuncDef::GenerateIR() {
             }else{
                 auto &api = funcfparams->list[i]->array_ptr_index;
                 if(api->list.size() == 0){
-                    cout << "@" << *(funcfparams->list[i]->ident) << ": *i32";
+                    cout << ", @" << *(funcfparams->list[i]->ident) << ": *i32";
                 }else{
+                    cout << ", @" << *(funcfparams->list[i]->ident) << ": ";
                     api->GenerateIR();
                     cout << "*";
                     for(int i = 0; i < api->list.size(); ++i) {
@@ -201,10 +202,11 @@ void FuncRParams::GenerateIR() {
     // will generate the temorary var
     for(int i = 0; i < list.size(); ++i){
         list[i]->GenerateIR(); // exp->generateIR(); which will generate the tempvar
-        cerr << "list[i]->type: " << list[i]->type->kind << endl;
-        cerr << *(list[i]->varName) << endl;
+        // cerr << "varName: " << *(list[i]->varName) << endl;
+        // cerr << "type: " << list[i]->type->kind << endl;
         if(list[i]->type->kind == Type::Array){
-            cout << "  \%" << temp_count++ << " = getelemeptr " << *(list[i]->varName) <<", 0" << endl; 
+            cout << "  \%" << temp_count++ << " = getelemptr " << *(list[i]->varName) <<", 0" << endl; 
+            list[i]->varName.reset(new std::string("%" + std::to_string(temp_count - 1)));
         }
     }
 } 
@@ -302,7 +304,7 @@ void ConstDef::EvaluateConstValues(){
             assert(false);
         }
         current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
-        current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+        current_variable_table_location->var_types[*ident] = Type::IntTy();
     }else if(kind == _Array){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
@@ -383,6 +385,7 @@ void ArrayPtrIndex::EvaluateConstValues(){
 }
 
 void ArrayPtrIndex::GenerateIR(){
+    cerr << list.size() <<endl;
     for(int i = 0; i < list.size(); ++i){
         list[i]->EvaluateConstValues();
     }
@@ -444,11 +447,11 @@ void VarDef::GenerateIR(){
             if(init_val->kind == InitVal::_Exp){
                 string tmp = *(init_val->varName);
                 cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
-                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+                current_variable_table_location->var_types[*ident] = Type::IntTy();
             }else if(init_val->kind == InitVal::_Empty){
                 // zero init
                 cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
-                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+                current_variable_table_location->var_types[*ident] = Type::IntTy();
             } 
             else{
                 AllocArray(ai, *ident);
@@ -469,7 +472,7 @@ void VarDef::GenerateIR(){
         }else{
             if(kind == _SingleVal){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
-                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+                current_variable_table_location->var_types[*ident] = Type::IntTy();
             }else if(kind == _InitList){
                 AllocArray(ai, *ident);
                 current_variable_table_location->array_dims[*ident] = ai->list.size();
@@ -501,7 +504,7 @@ void VarDef::GenerateIR(){
     //single value or initialist
     if(kind == _SingleVal){
         cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32\n";
-        current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+        current_variable_table_location->var_types[*ident] = Type::IntTy();
     }else if(kind == _InitList){
         // The array need to be defined initliazed because we can initialize it later use assgining value.
         current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
@@ -542,7 +545,7 @@ void VarDef::GenerateIR(){
             // check if the init_val variable is initialized and not temporary variables
             string tmp = *(init_val->varName);
 
-            current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
+            current_variable_table_location->var_types[*ident] = Type::IntTy();
     
             // comes from primaryexp so it must have value or it will exit earlier.
             cout << "  store " << *(init_val->varName) 
@@ -673,7 +676,6 @@ void Stmt::GenerateIR() {
 
         // const value(or Number) or temparory value
         lval->GenerateIR();
-        cerr << "lval->ptr: "<< lval->ptr << endl;
 
         cout << "  store " << *(exp->varName) << ", " << (lval->ptr) << endl;
 
@@ -860,16 +862,20 @@ void PrimaryExp::GenerateIR(){
         // }
         
         // assign a new temp var
-        varName = std::make_unique<string>("%" + to_string(temp_count++));
         lval->GenerateIR();
+        varName = std::make_unique<string>(lval->ptr);
         type = lval->type;
+
+        // cerr << "varName: " << *varName << endl;
+        // cerr << "type: " << lval->type->kind << endl;
 
         // cerr << "lval type kind: " << (lval->type->kind == Type::Int )<< endl;
 
         // need to load because we use it as an right hand side value.
-        // if(lval->type->kind == Type::Int){
-        cout << "  " << *varName << " = load " << (lval->ptr) << endl;
-        // }
+        if(lval->type->kind == Type::Int){
+            varName = std::make_unique<string>("%" + to_string(temp_count++));
+            cout << "  " << *varName << " = load " << (lval->ptr) << endl;
+        }
     }
 }
 
@@ -933,7 +939,7 @@ void UnaryExp::GenerateIR(){
         is_function_called = true;
         params->GenerateIR();
         max_parameter_number = max(max_parameter_number, static_cast<int>(params->list.size()));
-        if(func_type_map[*func_name] != "void"){
+        if(func_type_map[*func_name] == "int"){
             varName = std::make_unique<string>("\%" + to_string(temp_count++));
             cout << "  " << *varName << " = call @" << *func_name << "(";
         }else{
@@ -1145,9 +1151,9 @@ void EqExp::GenerateIR(){
     if(kind == _RelExp){
         rel_exp->GenerateIR();
         varName = make_unique<string>(*(rel_exp->varName));
-        type = Type::IntTy();
-    }else if(kind == _EqExp_EqOp_RelExp){
         type = rel_exp->type;
+    }else if(kind == _EqExp_EqOp_RelExp){
+        type = Type::IntTy();
         eq_exp->GenerateIR();
         rel_exp->GenerateIR();
 
@@ -1396,6 +1402,8 @@ void LVAL::GenerateIR(){
     if(ai == nullptr){
         type = currentType;
         ptr = curVarName;
+        // cerr << "type: " << type->kind << endl;
+        // cerr << "ptr: " << ptr << endl;
         return;
     }
 
@@ -1432,6 +1440,9 @@ void LVAL::GenerateIR(){
     // curVarName is the current value.
     ptr = curVarName;
     type = currentType;
+
+    // cerr << "type: " << type->kind << endl;
+    // cerr << "ptr: " << ptr << endl;
 }
 
 
@@ -1575,7 +1586,6 @@ void InitializeLocalList(const unique_ptr<ArrayIndex> &ai, string &varName){
     for(int i = 0; i < ai->list.size(); ++i){
         mul *= get<int>(ai->list[i]->const_value);
     }
-    cerr<< mul << endl;
     // Print _ptr_{temp_count_ptr} for the location of the array.
     for(int i = 0; i < array_init.size(); ++i) {
         // use ArrayIndex and _ptr_{temp_count_ptr++} to store the temporary var to store the array.
