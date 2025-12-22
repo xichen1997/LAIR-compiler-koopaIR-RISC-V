@@ -227,7 +227,7 @@ FuncFParams
 FuncFParam
   : BType IDENT{
     auto ast = new FuncFParam();
-    ast->type.reset($1);
+    ast->param_type.reset($1);
     ast->kind = FuncFParam::_Single;
     ast->ident.reset($2);
     cerr << "[AST] Built FuncFParam at line " << @1.first_line << endl;
@@ -235,7 +235,7 @@ FuncFParam
   }
   | BType IDENT ArrayPtrIndex {
     auto ast = new FuncFParam();
-    ast->type.reset($1);
+    ast->param_type.reset($1);
     ast->kind = FuncFParam::_Array;
     ast->ident.reset($2);
     auto api = dynamic_cast<ArrayPtrIndex*>($3);

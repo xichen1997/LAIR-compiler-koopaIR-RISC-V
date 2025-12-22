@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <stack>
 #include "koopa.h"
+#include "type.h"
 
 using namespace std;
 
@@ -65,6 +66,7 @@ class BaseAST{
     bool has_return;
     bool has_break;
     bool has_continue;
+    Type* type = nullptr;
     virtual ~BaseAST() = default;
 
     virtual void GenerateIR() = 0;
@@ -136,7 +138,7 @@ class FuncFParam : public BaseAST{
         _Single,
         _Array
     } kind;
-    std::unique_ptr<string> type;
+    std::unique_ptr<string> param_type;
     std::unique_ptr<string> ident;
     std::unique_ptr<string> varName;
     std::unique_ptr<ArrayPtrIndex> array_ptr_index;
@@ -483,7 +485,7 @@ class LVAL : public BaseAST{
         _ArrayElement
     } kind;
     std::unique_ptr<string> ident;
-    std::unique_ptr<string> ptr;
+    std::string ptr;
     std::unique_ptr<ArrayIndex> ai;
 
     void GenerateIR() override;

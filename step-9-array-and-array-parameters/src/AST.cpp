@@ -7,6 +7,7 @@ struct StackVariable{
     unordered_map<string, string> declared_variables;
     unordered_set<string> is_func_params_array;
     unordered_map<string, int> array_dims;
+    unordered_map<string, Type*> var_types;
 } stackVariable;
 
 bool is_defining_global_var = false;
@@ -218,6 +219,8 @@ void FuncFParam::GenerateIR(){
         current_variable_table_location->initialized_variables[*ident] = *ident;
         cout << "  store @" << *ident << ", %" << *ident << endl;
         varName = std::make_unique<string>("\%" + *ident);
+
+        current_variable_table_location->var_types[*ident] = Type::IntTy();
     }else if(kind == _Array){
         array_ptr_index->GenerateIR();
         StackVariable* current_variable_table_location = stack_variable_table.back().get();
@@ -225,6 +228,15 @@ void FuncFParam::GenerateIR(){
         current_variable_table_location->initialized_variables[*ident] = *ident;
         current_variable_table_location->is_func_params_array.insert(*ident);
         current_variable_table_location->array_dims[*ident] = array_ptr_index->list.size() + 1;
+
+        // pointer of array
+        Type* t = Type::IntTy();
+        for (int i = array_ptr_index->list.size() - 1; i >= 0; --i) {
+            t = Type::ArrayTy(t, get<int>(array_ptr_index->list[i]->const_value));
+        }
+        current_variable_table_location->var_types[*ident] = Type::PointerTy(t);
+
+
         cout << "  %" << *ident << " = alloc "; 
 
         // for the 1D array, pass a ptr.
@@ -285,6 +297,7 @@ void ConstDef::EvaluateConstValues(){
             assert(false);
         }
         current_variable_table_location->const_variable_table[*ident] = std::get<int>(const_value);
+        current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
     }else if(kind == _Array){
         // Don't need to seperate the global def or not, we have to output this to the 
         // koopa IR, rather than go to the symbol table.
@@ -298,6 +311,14 @@ void ConstDef::EvaluateConstValues(){
 
         // Note if the varname is defined in the stack, the name should be "*ident_" + to_string(temp_count++);
         // global don't need to count total_variable_number because it's not used inside the stack.
+
+        // define the array
+        Type* t = Type::IntTy();
+        for (int i = ai->list.size() - 1; i >= 0; --i) {
+            int len = get<int>(ai->list[i]->const_value);
+            t = Type::ArrayTy(t, len);
+        }
+        current_variable_table_location->var_types[*ident] = t;
 
         if(const_init_val && is_defining_global_var){
             AllocArray(ai, *ident);
@@ -418,9 +439,11 @@ void VarDef::GenerateIR(){
             if(init_val->kind == InitVal::_Exp){
                 string tmp = *(init_val->varName);
                 cout << "global @" << *ident << " = alloc i32, " << tmp << endl; 
+                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
             }else if(init_val->kind == InitVal::_Empty){
                 // zero init
                 cout << "global @" << *ident << " = alloc i32, zeroinit" << endl; 
+                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
             } 
             else{
                 AllocArray(ai, *ident);
@@ -428,16 +451,32 @@ void VarDef::GenerateIR(){
                 GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
                 int idx = 0;
                 PrintArrayInitInNestedFormat(ai, 0, ai->list.size(), idx);
-                current_variable_table_location->array_dims[*ident] = ai->list.size();
+
+                // define the type:
+                Type* t = Type::IntTy();
+                for (int i = ai->list.size() - 1; i >= 0; --i) {
+                    int len = get<int>(ai->list[i]->const_value);
+                    t = Type::ArrayTy(t, len);
+                }
+                current_variable_table_location->var_types[*ident] = t;
                 cout << endl;
             }
         }else{
             if(kind == _SingleVal){
                 cout << "global @" << *ident << " = alloc i32, zeroinit"  << endl; 
+                current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
             }else if(kind == _InitList){
                 AllocArray(ai, *ident);
                 current_variable_table_location->array_dims[*ident] = ai->list.size();
                 cout << ", zeroinit" << endl;
+
+                // define the array
+                Type* t = Type::IntTy();
+                for (int i = ai->list.size() - 1; i >= 0; --i) {
+                    int len = get<int>(ai->list[i]->const_value);
+                    t = Type::ArrayTy(t, len);
+                }
+                current_variable_table_location->var_types[*ident] = t;
             }
         }
         return;
@@ -457,10 +496,18 @@ void VarDef::GenerateIR(){
     //single value or initialist
     if(kind == _SingleVal){
         cout << "  @" << current_variable_table_location->declared_variables[*ident] << " = alloc i32\n";
+        current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
     }else if(kind == _InitList){
         // The array need to be defined initliazed because we can initialize it later use assgining value.
         current_variable_table_location->initialized_variables[*ident] = current_variable_table_location->declared_variables[*ident];
         
+        // define the type:
+        Type* t = Type::IntTy();
+        for (int i = ai->list.size() - 1; i >= 0; --i) {
+            int len = get<int>(ai->list[i]->const_value);
+            t = Type::ArrayTy(t, len);
+        }
+        current_variable_table_location->var_types[*ident] = t;
         
         ai->EvaluateConstValues();
         int sum = 1;
@@ -489,6 +536,8 @@ void VarDef::GenerateIR(){
         if(init_val->kind == InitVal::_Exp){
             // check if the init_val variable is initialized and not temporary variables
             string tmp = *(init_val->varName);
+
+            current_variable_table_location->var_types[*ident] = Type::PointerTy(Type::IntTy());
     
             // comes from primaryexp so it must have value or it will exit earlier.
             cout << "  store " << *(init_val->varName) 
@@ -500,6 +549,15 @@ void VarDef::GenerateIR(){
             GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
             InitializeLocalList(ai, current_variable_table_location->initialized_variables[*ident]);
             current_variable_table_location->array_dims[*ident] = ai->list.size();
+
+            // define the type:
+            Type* t = Type::IntTy();
+            for (int i = ai->list.size() - 1; i >= 0; --i) {
+                int len = get<int>(ai->list[i]->const_value);
+                t = Type::ArrayTy(t, len);
+            }
+            current_variable_table_location->var_types[*ident] = t;
+
             cout << endl;
         }else if(init_val->kind == InitVal::_InitList){
 
@@ -511,6 +569,13 @@ void VarDef::GenerateIR(){
 
             current_variable_table_location->array_dims[*ident] = ai->list.size();
 
+            // define the type:
+            Type* t = Type::IntTy();
+            for (int i = ai->list.size() - 1; i >= 0; --i) {
+                int len = get<int>(ai->list[i]->const_value);
+                t = Type::ArrayTy(t, len);
+            }
+            current_variable_table_location->var_types[*ident] = t;
             cout << endl;
         }
     }
@@ -520,6 +585,7 @@ void InitVal::GenerateIR(){
     if(kind == _Exp){
         exp->GenerateIR();
         varName = std::make_unique<string>(*(exp->varName));
+        type = exp->type;
     }else if(kind == _Empty){
         // do nothing for now.
     }else if(kind == _InitList){
@@ -598,13 +664,12 @@ void Stmt::GenerateIR() {
             cerr << "Use Undeclared Vairables to assign Value" << endl;
             assert(false);
         }
+
+
         // const value(or Number) or temparory value
-        if(lval->kind == LVAL::_Ident){
-            cout << "  store " << *(exp->varName) << ", @" << possible_variable_table_location->declared_variables[*(lval->ident)] << endl;
-        }else if(lval->kind == LVAL::_ArrayElement){
-            lval->GenerateIR();
-            cout << "  store " << *(exp->varName) << ", " << *(lval->ptr) << endl;
-        }
+        lval->GenerateIR();
+        cout << "  store " << *(exp->varName) << ", " << (lval->ptr) << endl;
+
     } else if(kind == _Return_Exp){
         exp->GenerateIR();
         cout << "  ret " << *(exp->varName) << endl;
@@ -736,18 +801,21 @@ void Stmt::GenerateIR() {
 void Number::GenerateIR() {
     // Implementation for IR generation would go here
     // cout << to_string(int_const);
+    type = Type::IntTy();
 }
 
 void Exp::GenerateIR() {
     // Implementation for IR generation would go here
     lor_exp->GenerateIR();
     varName = std::make_unique<string>(*(lor_exp->varName));
+    type = Type::IntTy();
 }
 
 void Exp::EvaluateConstValues(){
     lor_exp->EvaluateConstValues();
     const_value = lor_exp->const_value;
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
+    type = Type::IntTy();
 }
 
 void PrimaryExp::GenerateIR(){
@@ -756,9 +824,11 @@ void PrimaryExp::GenerateIR(){
         exp->GenerateIR();
         // get the pointer and dereference to get the varName value from Exp
         varName = std::make_unique<string>(*(exp->varName));
+        type = exp->type;
     } else if(kind == _Number){
         // number->GenerateIR();
-        varName = std::make_unique<string>(to_string(number->int_const));  
+        varName = std::make_unique<string>(to_string(number->int_const));
+        type = Type::IntTy(); 
     } else if(kind == _Lval){
         // for Lval, just use the ident as varName
         // already do the constant folding. So the upstream node don't need to care.
@@ -784,31 +854,15 @@ void PrimaryExp::GenerateIR(){
         
         // assign a new temp var
         varName = std::make_unique<string>("%" + to_string(temp_count++));
+        lval->GenerateIR();
+        type = lval->type;
 
+        // cerr << "lval type kind: " << (lval->type->kind == Type::Int )<< endl;
 
-        if(lval->kind == LVAL::_Ident){
-            // first frame in stack means the parameters.
-            StackVariable* first_variable_table_location = stack_variable_table[1].get();
-            // *ident could be the variable(should be printed with @ in the beginning or the temporary vairable inside a function, start with % + alpha) 
-            if(first_variable_table_location->declared_variables.count(*(lval->ident))){
-                // %x ,etc,
-                cout <<"  " << *varName << " = "<< "load %" << possible_variable_table_location->initialized_variables[*ident] << endl;
-            }else{
-                cout <<"  " << *varName << " = "<< "load @" << possible_variable_table_location->initialized_variables[*ident] << endl;
-            }
-        }else if(lval->kind == LVAL::_ArrayElement){
-            // If this is an arrayElement, we should call lval to extra the ptr and store it in lval
-            lval->GenerateIR();
-            if(lval->ai->list.size() == possible_variable_table_location->array_dims[*(lval->ident)]){
-                // pass a value
-                cout << "  " << *varName << " = " << "load " << *(lval->ptr) << endl;
-            }else{
-            cerr << "ai_list_size: " << lval->ai->list.size() << endl;
-            cerr << "array_dims: " << possible_variable_table_location->array_dims[*(lval->ident)] << endl;
-            // else it will be a ptr, then nothing need to be done here.
-            varName = make_unique<string>(*(lval->ptr));
-            }
-        }
+        // need to load because we use it as an right hand side value.
+        // if(lval->type->kind == Type::Int){
+        cout << "  " << *varName << " = load " << (lval->ptr) << endl;
+        // }
     }
 }
 
@@ -816,8 +870,10 @@ void PrimaryExp::EvaluateConstValues(){
     if(kind == _Exp){
         exp->EvaluateConstValues();
         const_value = exp->const_value;
+        type = Type::IntTy();
     } else if(kind == _Number){
         const_value = number->int_const;
+        type = Type::IntTy();
     } else if(kind == _Lval){
         // lookup the const_variable_table to get the value
         StackVariable* possible_variable_table_location = checkIsConstant(*(lval->ident));
@@ -826,6 +882,7 @@ void PrimaryExp::EvaluateConstValues(){
             assert(false);
         }
         const_value = possible_variable_table_location->const_variable_table[*(lval->ident)];
+        type = Type::IntTy();
     } else{
         // give error information
         cerr << "Error: Invalid PrimaryExp kind for EvaluateConstValues" << endl;
@@ -852,6 +909,7 @@ void UnaryExp::GenerateIR(){
         } else if(unary_op->compare("+") == 0){
             cout << "add 0, " << *(unary_exp->varName) << endl;
         }
+        type = Type::IntTy();
     } else if(kind == _Func_No_Params){
         // call function  
         // need to calculate the max_parameters_number
@@ -904,6 +962,7 @@ void UnaryExp::EvaluateConstValues(){
         cerr << "Error: Invalid UnaryExp kind for EvaluateConstValues" << endl;
         assert(false);
     }
+    type = Type::IntTy();
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
 }
 
@@ -933,6 +992,7 @@ void MulExp::GenerateIR() {
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void MulExp::EvaluateConstValues(){
@@ -958,6 +1018,7 @@ void MulExp::EvaluateConstValues(){
             assert(false);
         }
     }
+    type = Type::IntTy();
     varName = make_unique<string>(to_string(std::get<int>(const_value)));
 }
 
@@ -982,6 +1043,7 @@ void AddExp::GenerateIR(){
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void AddExp::EvaluateConstValues(){
@@ -1006,6 +1068,7 @@ void AddExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
+    type = Type::IntTy();
 }
 
 void RelExp::GenerateIR(){
@@ -1032,6 +1095,7 @@ void RelExp::GenerateIR(){
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void RelExp::EvaluateConstValues(){
@@ -1060,6 +1124,7 @@ void RelExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
+    type = Type::IntTy();
 }
 
 void EqExp::GenerateIR(){
@@ -1082,6 +1147,7 @@ void EqExp::GenerateIR(){
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void EqExp::EvaluateConstValues(){
@@ -1106,6 +1172,7 @@ void EqExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
+    type = Type::IntTy();
 }
 
 
@@ -1165,6 +1232,7 @@ void LAndExp::GenerateIR(){
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void LAndExp::EvaluateConstValues(){
@@ -1187,6 +1255,7 @@ void LAndExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
+    type = Type::IntTy();
 }
 
 
@@ -1244,6 +1313,7 @@ void LOrExp::GenerateIR(){
             assert(false);
         }
     }
+    type = Type::IntTy();
 }
 
 void LOrExp::EvaluateConstValues(){
@@ -1266,16 +1336,19 @@ void LOrExp::EvaluateConstValues(){
         }
         varName = make_unique<string>(to_string(std::get<int>(const_value)));
     }
+    type = Type::IntTy();
 }
 
 
 void ConstExp::GenerateIR() {
     // do nothing
+    type = Type::IntTy();
 }
 
 void ConstExp::EvaluateConstValues(){
     exp->EvaluateConstValues();
     const_value = exp->const_value;
+    type = Type::IntTy();
 }
 
 void LVAL::GenerateIR(){
@@ -1285,65 +1358,60 @@ void LVAL::GenerateIR(){
         cerr << "Error: the " << *ident << " is not declared" << endl;
         assert(false);
     }
+    Type* ty = possible_variable_table_location->var_types[*ident];;
+    Type* currentType = ty;
 
-    if(kind == _ArrayElement){
-        // need to judge if this is array or array pointer.
-        auto first_variable_table_location = stack_variable_table[1].get();
-        if(!first_variable_table_location->is_func_params_array.count(*ident)){
-            ai->GenerateIR();
-            for(int j = 0; j < ai->list.size(); ++j){
-                total_variable_number++;
-                if(j == 0){
-                    cout << "  \%ptr_" << temp_count_ptr++ 
-                        << " = getelemptr @" << possible_variable_table_location->declared_variables[*ident]
-                        << ", " << *(ai->list[j]->varName) << endl;
-                }else {
-                    cout << "  \%ptr_" << temp_count_ptr 
-                        << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                        << ", " << *(ai->list[j]->varName) << endl;
-                    temp_count_ptr++;
-                }
-            }
-            ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
-        }else{
-            ai->GenerateIR();
-            // need to transform the function parameters type use getptr to get first dimension.
 
-                // use getelemptr to get the correct pointer.
-            for(int j = 0; j < ai->list.size(); ++j){
-                total_variable_number++;
-                if(j == 0){
-                    cout << "  \%ptr_" << temp_count_ptr++ <<" = load \%" << *ident << endl; 
-                    cout << "  \%ptr_" << temp_count_ptr++ 
-                                << " = getptr \%ptr_" << temp_count_ptr - 2
-                                << ", " << *(ai->list[0]->varName) << endl;
-                }else {
-                    cout << "  \%ptr_" << temp_count_ptr 
-                    << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                    << ", " << *(ai->list[j]->varName) << endl;
-                    temp_count_ptr++;
-                }
-            }
-            if(first_variable_table_location->array_dims[*ident] - ai->list.size() == 1){
-                cout << "  \%ptr_" << temp_count_ptr 
-                    << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-                    << ", " << "0" << endl;
-                
-                total_variable_number++;
-                temp_count_ptr++;
-            }
+    // decide the format of the lval, is that it is a pointer or an array or just a value.
+    string curVarName;
+    StackVariable* first_variable_table_location = stack_variable_table[1].get();
+    if(first_variable_table_location == possible_variable_table_location){
+        curVarName = "\%" + possible_variable_table_location->initialized_variables[*ident];
+    }else{
+        curVarName = "@" + possible_variable_table_location->initialized_variables[*ident];
+    }
 
-            // }else{
-            //     // when the ai->list.size() == 0, need to convert the from type *[i32, n] to *i32
-            //     total_variable_number++;
-            //     cout << "  \%ptr_" << temp_count_ptr 
-            //     << " = getelemptr " << "\%ptr_" << temp_count_ptr-1 
-            //     << ", " << "0" << endl;
-            //     temp_count_ptr++;
-            // }
-            ptr.reset(new string("\%ptr_" + to_string(temp_count_ptr-1)));
+    // early return if the ai is none, the type won't change.
+    if(ai == nullptr){
+        type = currentType;
+        ptr = curVarName;
+        return;
+    }
+
+    for (int i = 0; i < ai->list.size(); i++) {
+        ai->list[i]->GenerateIR();  // get the index varName
+
+        if (currentType->kind == Type::Pointer) {
+            // p[i]
+            cout << "  \%ptr_" << temp_count_ptr++ 
+                 << " = load " 
+                 << curVarName 
+                 << endl;
+            cout << "  \%ptr_" << temp_count_ptr++ 
+                 << " = getptr " << temp_count_ptr - 2 
+                 << ", " 
+                 << *(ai->list[i]->varName) 
+                 << endl;
+            currentType = currentType->elem;
+            curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
+        }
+        else if (currentType->kind == Type::Array) {
+            // a[i]
+            cout << "  \%ptr_" << temp_count_ptr++ 
+                 << " = getelemptr " 
+                 << curVarName
+                 << ", " << *(ai->list[i]->varName) << endl;
+            curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
+            currentType = currentType->elem;
+        }
+        else {
+            assert("cannot index into non-array/non-pointer");
         }
     }
+
+    // curVarName is the current value.
+    ptr = curVarName;
+    type = currentType;
 }
 
 
