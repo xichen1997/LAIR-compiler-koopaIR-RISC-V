@@ -1,41 +1,66 @@
-void init(int arr[][10][10]) {
-  int i = 0;
-  while (i < 10) {
-    int j = 0;
-    while (j < 10) {
-      int k = 0;
-      while (k < 10) {
-        arr[i][j][k] = i * 100 + j * 10 + k;
-        k = k + 1;
-      }
-      j = j + 1;
+int n;
+int QuickSort(int arr[], int low, int high)
+{
+    if (low < high)
+    {
+        int i;
+        i = low;
+        int j;
+        j = high;
+        int k;
+        k = arr[low];
+        while (i < j)
+        {
+            while(i < j && arr[j] > k - 1)
+            {
+                j = j - 1;
+            }
+ 
+            if(i < j)
+            {
+                arr[i] = arr[j];
+                i = i + 1;
+            }
+ 
+            while(i < j && arr[i] < k)
+            {
+                i = i + 1;
+            }
+ 
+            if(i < j)
+            {
+                arr[j] = arr[i];
+                j = j - 1;
+            }
+        }
+ 
+        arr[i] = k;
+        int tmp;
+        tmp = i - 1;
+        tmp = QuickSort(arr, low, tmp);
+        tmp = i + 1;
+        tmp = QuickSort(arr, tmp, high);
     }
-    i = i + 1;
-  }
+    return 0;
 }
 
-int f1(int a0[], int a1[], int a2[], int a3[], int a4[], int a5[], int a6[],
-       int a7[], int a8[], int a9[]) {
-  return a0[0] + a1[1] + a2[2] + a3[3] + a4[4] + a5[5] + a6[6] + a7[7] + a8[8] +
-         a9[9];
+int main(){
+    n = 10;
+    int a[10];
+    a[0]=4;a[1]=3;a[2]=9;a[3]=2;a[4]=0;
+    a[5]=1;a[6]=6;a[7]=5;a[8]=7;a[9]=8;
+    int i;
+    i = 0;
+    int tmp;
+    tmp = 9;
+    i = QuickSort(a, i, tmp);
+    while (i < n) {
+        int tmp;
+        tmp = a[i];
+        putint(tmp);
+        tmp = 10;
+        putch(tmp);
+        i = i + 1;
+    }
+    return 0;
 }
-
-int f2(int a0[][10], int a1[], int a2, int a3[], int a4[], int a5[][10][10],
-       int a6[], int a7[], int a8, int a9[][10]) {
-  return a0[0][9] + a1[1] + a2 + a3[3] + a4[4] + a5[5][5][5] + a6[6] + a7[7] +
-         a8 + a9[9][8];
-}
-
-int main() {
-  int arr[10][10][10], sum = 0;
-  init(arr);
-  sum = sum + f1(arr[0][0], arr[1][1], arr[2][2], arr[3][3], arr[4][4],
-                 arr[5][5], arr[6][6], arr[7][7], arr[8][8], arr[9][9]);
-  sum = sum + f2(arr[0], arr[1][1], arr[2][2][2], arr[3][3], arr[4][4], arr,
-                 arr[6][6], arr[7][7], arr[8][8][8], arr[9]);
-  putint(sum);
-  putch(10);
-  return 0;
-}
-
-

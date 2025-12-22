@@ -1402,6 +1402,14 @@ void LVAL::GenerateIR(){
     if(ai == nullptr){
         type = currentType;
         ptr = curVarName;
+        if(type->kind == Type::Pointer){
+            cout << "  \%ptr_" << temp_count_ptr++ 
+                 << " = load " 
+                 << curVarName 
+                 << endl;
+            type = currentType->elem;
+            curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
+        }
         // cerr << "type: " << type->kind << endl;
         // cerr << "ptr: " << ptr << endl;
         return;
