@@ -100,10 +100,8 @@ void CompUnitItem::GenerateIR() {
         }
         // stack_variable_table.resize(1);
         // clear count index
-        while_index = 0;
         local_variable_index = 0;
         logic_operator_index = 0;
-        if_control_index = 0;
         total_variable_number = 0;
         max_parameter_number = 0;
         is_function_called = false;
