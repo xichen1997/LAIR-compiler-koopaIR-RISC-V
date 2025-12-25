@@ -16,6 +16,19 @@ string printBBName(const string & str){
   return str.substr(1);
 }
 
+int calSize(const koopa_raw_type_t&type){
+  switch (type->tag) {
+    case KOOPA_RTT_INT32:
+      return 4;
+    case KOOPA_RTT_POINTER:
+      return 4; // SysY / Koopa: 32-bit pointer
+    case KOOPA_RTT_ARRAY:
+      return type->data.array.len * calSize(type->data.array.base);
+    default:
+      assert(false && "unknown koopa type");
+  }
+}
+
 void LoadFromStack(const std::string &reg, int offset) {
   if (offset > 2047 || offset < -2048) {
       cout << "  li t1, " << offset << endl;
@@ -38,8 +51,6 @@ void StoreToStack(const std::string &reg, int offset) {
 }
 
 void Visit(const koopa_raw_integer_t &integer, const koopa_raw_value_t &value) {
-    // do nothing, termination node
-    // integer_map[value] = integer.value;
    }
   
 void Visit(const koopa_raw_return_t &ret) {
@@ -64,7 +75,7 @@ void Visit(const koopa_raw_return_t &ret) {
 
   // return to the previous stack frame
   if(sp_gap > 2047){
-    cout << "  li t0, 0" << sp_gap << endl;
+    cout << "  li t0, " << sp_gap << endl;
     cout << "  add sp, sp, t0" << endl;
   }else if(sp_gap <= 2047 && sp_gap > 0) {
     cout << "  addi sp, sp, " << sp_gap << endl;
@@ -83,12 +94,51 @@ void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t
     cout << "  .word " << global_alloc.init->kind.data.integer.value << endl;
   }else if(t == KOOPA_RVT_ZERO_INIT){
     cout << "  .zero 4" << endl;
-  }else{
+  }else if(t == KOOPA_RVT_AGGREGATE){
+    // calculate the array size.
+  }
+  else{
     cerr << "Error: the global var allocation data is either KOOPA_RVT_INTEGER or KOOPA_RVT_ZERO_INIT" << endl;
     assert(false);
   }
   cout << endl;
 }
+
+void Visit(const koopa_raw_func_arg_ref_t &func_arg_ref, const koopa_raw_value_t &value){
+  // do nothing here
+}
+
+void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t &value){
+  // calculate the location of an element ptr offset.
+  cout << "  li t0, " << stack_offset_map[get_elem_ptr.src] << endl;
+  cout << "  add t0, sp, t0" << endl; 
+
+  cout << "  li t1, " << get_elem_ptr.index->kind.data.integer.value << endl;
+  cout << "  li t2, " << calSize(get_elem_ptr.src->ty->data.pointer.base->data.array.base) << endl;
+  cout << "  mul t1, t1, t2" << endl;
+  cout << "  add t0, t0, t1" << endl;
+  stack_offset_map[value] = offset*4;
+  StoreToStack("t0", stack_offset_map[value]);
+  offset++;
+  return;
+}
+
+
+void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
+  cout << "  li t0, " << stack_offset_map[get_ptr.src] << endl;
+  cout << "  add t0, sp, t0" << endl; 
+
+  cout << "  li t1, " << get_ptr.index->kind.data.integer.value << endl;
+  cout << "  li t2, " << calSize(get_ptr.src->ty->data.pointer.base) << endl;
+  cout << "  mul t1, t1, t2" << endl;
+  cout << "  add t0, t0, t1" << endl;
+  stack_offset_map[value] = offset*4;
+  offset++;
+  cerr << offset << endl;
+  StoreToStack("t0", stack_offset_map[value]);
+  return;
+}
+
 
 
 void Visit(const koopa_raw_branch_t &branch, const koopa_raw_value_t &value){
@@ -111,6 +161,13 @@ void Visit(const koopa_raw_jump_t &jump, const koopa_raw_value_t &value){
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
   // check if this is global allocate, if yes then we don't need to generate the initialization again.
+  if(load.src->kind.tag == KOOPA_RVT_GET_PTR || load.src->kind.tag  == KOOPA_RVT_GET_ELEM_PTR){
+    Visit(load.src);
+    LoadFromStack("t0", stack_offset_map[load.src]);
+    cout << "  lw t0, 0(t0)" << endl;
+    StoreToStack("t0", stack_offset_map[value]);
+    return;
+  }
   if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
     // need to load from the global definition area.
     string tmp(load.src->name);
@@ -145,7 +202,7 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
 
   // for loading extra parameters from last stack frame,
   // need to add current stack frame size and the offset.
-  // if they have same name like %x = @x, which is loading the parameters, we should compare and add
+  // if they havfe same name like %x = @x, which is loading the parameters, we should compare and add
   // a gap, which is the current total_variable_number.
   // 
   // check exist before use. sometimes the store value is a integer without name.
@@ -164,14 +221,20 @@ void Visit(const koopa_raw_store_t &store, const koopa_raw_value_t &value){
     LoadFromStack("t0", stack_offset_map[store.value]);
   }
 
-  // if store dest is a global alloc, we should read the address
-  if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
-    string tmp((store.dest->name));
-    tmp = tmp.substr(1);
-    cout << "  la t1, " << tmp << endl; 
-    cout << "  sw t0, 0(t1)" << endl;
+  if(store.dest->kind.tag != KOOPA_RVT_GET_PTR && store.dest->kind.tag != KOOPA_RVT_GET_ELEM_PTR){
+    // if store dest is a global alloc, we should read the address
+    if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
+      string tmp((store.dest->name));
+      tmp = tmp.substr(1);
+      cout << "  la t1, " << tmp << endl; 
+      cout << "  sw t0, 0(t1)" << endl;
+    }else{
+      StoreToStack("t0", stack_offset_map[store.dest]);
+    }
   }else{
-    StoreToStack("t0", stack_offset_map[store.dest]);
+    // for the pointer value 
+    LoadFromStack("t1", stack_offset_map[store.dest]);
+    cout << "  sw t0, 0(t1)" << endl;
   }
 }
 
@@ -213,9 +276,6 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
 
 }
 
-void Visit(const koopa_raw_func_arg_ref_t &func_arg_ref, const koopa_raw_value_t &value){
-  // do nothing here
-}
   
 void Visit(const koopa_raw_value_t &value) {
   
@@ -236,12 +296,8 @@ void Visit(const koopa_raw_value_t &value) {
       case KOOPA_RVT_ALLOC:
         // no visit function since no value need to be saved.
         stack_offset_map[value] = offset*4; // value -> stack sp offset (of course need to * 4)
-        offset++;
+        offset += calSize(value->ty->data.pointer.base) / 4;
         break;
-      // case KOOPA_RVT_UNDEF:
-      //   stack_offset_map[value] = offset*4;
-      //   offset++;
-      //   break;
       case KOOPA_RVT_LOAD:
         stack_offset_map[value] = offset*4;
         offset++;
@@ -265,6 +321,12 @@ void Visit(const koopa_raw_value_t &value) {
       case KOOPA_RVT_GLOBAL_ALLOC:
         Visit(kind.data.global_alloc, value);
         break;
+      case KOOPA_RVT_GET_PTR:
+        Visit(kind.data.get_ptr, value);
+        break;
+      case KOOPA_RVT_GET_ELEM_PTR:
+        Visit(kind.data.get_elem_ptr, value);
+        break;
       default:
         cerr << "Unhandled value tag = " << kind.tag << endl;
         assert(false);
@@ -277,17 +339,16 @@ void Visit(const koopa_raw_basic_block_t &bb) {
 }
   
 void Visit(const koopa_raw_function_t &func) {
-      // 1. 必须跳过声明，防止重复定义符号
+      // skip the duplicated definition.
       if (func->bbs.len == 0) {
         return;
       }
 
-    // 2. 获取函数名（去掉 Koopa IR 中的 @ 前缀）
+    // get the function name.
     string funcName = string(func->name).substr(1);
 
-    // 3. 直接从 Map 中查找数据，不需要 pop/erase，完全不需要担心顺序
+    // find the function names.
     if (func_total_vars_map.find(funcName) == func_total_vars_map.end()) {
-        // 防御性编程：如果找不到，说明 AST 阶段漏了，或者名字对不上
         cerr << "Error: Metadata not found for function " << funcName << endl;
         return; 
     }

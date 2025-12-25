@@ -25,7 +25,7 @@ extern int yyparse(unique_ptr<BaseAST> &ast);
 int main(int argc, const char *argv[]) {
   // 解析命令行参数. 测试脚本/评测平台要求你的编译器能接收如下参数:
   // compiler 模式 输入文件 -o 输出文件
-  yydebug = 1;
+  yydebug = 0;
   assert(argc == 5);
   auto mode = argv[1]; // currently support -koopa and -riscv
   auto input = argv[2];
