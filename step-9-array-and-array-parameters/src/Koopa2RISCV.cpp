@@ -69,8 +69,15 @@ void Visit(const koopa_raw_return_t &ret) {
     }
   }
 
-  if(is_function_called){
-    cout << "  lw ra, " << sp_gap - 4 << "(sp)" << endl;
+  int off = sp_gap - 4;
+  if (is_function_called) {
+    if (off >= -2048 && off <= 2047) {
+      cout << "  lw ra, " << off << "(sp)\n";
+    } else {
+      cout << "  li t0, " << off << "\n";
+      cout << "  add t0, sp, t0\n";
+      cout << "  lw ra, 0(t0)\n";
+    }
   }
 
   // return to the previous stack frame
@@ -92,10 +99,11 @@ void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t
   auto t = global_alloc.init->kind.tag;
   if(t == KOOPA_RVT_INTEGER){
     cout << "  .word " << global_alloc.init->kind.data.integer.value << endl;
-  }else if(t == KOOPA_RVT_ZERO_INIT){
-    cout << "  .zero 4" << endl;
   }else if(t == KOOPA_RVT_AGGREGATE){
-    // calculate the array size.
+    cout << "  .zero 4" << endl;
+  }else if(t == KOOPA_RVT_ZERO_INIT){
+    // calculate the array size.t == KOOPA_RVT_ZERO_INIT
+    cout << "  .zero 4" << endl;
   }
   else{
     cerr << "Error: the global var allocation data is either KOOPA_RVT_INTEGER or KOOPA_RVT_ZERO_INIT" << endl;
@@ -390,9 +398,15 @@ void Visit(const koopa_raw_function_t &func) {
       cout << "  addi sp, sp, " << -sp_gap << endl;
     }
 
-    // check if the func will call other func, if yes then consider store ra value.
-    if(is_function_called){
-      cout << "  sw ra, " << sp_gap - 4 << "(sp)" << endl;
+    int off = sp_gap - 4;
+    if (is_function_called) {
+      if (off >= -2048 && off <= 2047) {
+        cout << "  sw ra, " << off << "(sp)\n";
+      } else {
+        cout << "  li t0, " << off << "\n";
+        cout << "  add t0, sp, t0\n";
+        cout << "  sw ra, 0(t0)\n";
+      }
     }
 
     // This will do the koopaIR stuff. The parameters initialization is also included
