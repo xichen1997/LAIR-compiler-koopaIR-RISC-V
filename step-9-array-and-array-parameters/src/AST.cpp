@@ -1207,9 +1207,7 @@ void LAndExp::GenerateIR(){
     }else if(kind == _LAndExp_LAndOp_EqExp){
         // increase the index 
         type = Type::IntTy();
-        total_variable_number++;
-        total_variable_number++;
-        total_variable_number++;
+        total_variable_number += 3;
         int id = logic_operator_index++;
 
         if(land_op->compare("&&") == 0){
@@ -1409,6 +1407,7 @@ void LVAL::GenerateIR(){
                  << endl;
             type = currentType->elem;
             curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
+            total_variable_number++;
         }
         // cerr << "type: " << type->kind << endl;
         // cerr << "ptr: " << ptr << endl;
@@ -1430,6 +1429,7 @@ void LVAL::GenerateIR(){
                  << endl;
             currentType = currentType->elem;
             curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
+            total_variable_number+=2;
         }
         else if (currentType->kind == Type::Array) {
             // a[i]
@@ -1439,6 +1439,7 @@ void LVAL::GenerateIR(){
                  << ", " << *(ai->list[i]->varName) << endl;
             curVarName = "\%ptr_" + to_string(temp_count_ptr-1);
             currentType = currentType->elem;
+            total_variable_number++;
         }
         else {
             assert("cannot index into non-array/non-pointer");

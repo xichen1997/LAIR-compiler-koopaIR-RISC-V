@@ -12,23 +12,6 @@ unordered_map<koopa_raw_value_t, int> stack_offset_map; // string -> offset | in
 unordered_set<koopa_raw_value_t> visited;
 // unordered_map<koopa_raw_value_t, int> integer_map;
 
-void EmitArrayInitialization(const koopa_raw_value_t &value){
-  if(value->kind.tag == KOOPA_RVT_INTEGER){
-    cout << "  .word " << value->kind.data.integer.value << endl;
-  }else if(value->kind.tag == KOOPA_RVT_ZERO_INIT){
-    // do nothing here
-  }else if(value->kind.tag == KOOPA_RVT_AGGREGATE){
-    auto &agg_init = value->kind.data.aggregate;
-    for(int i = 0; i < agg_init.elems.len; ++i){
-      koopa_raw_value_t elem = reinterpret_cast<koopa_raw_value_t>(agg_init.elems.buffer[i]);
-      EmitArrayInitialization(elem);
-    }
-  }else{
-    cerr << "Error: Unsupported array initialization kind tag: " << value->kind.tag << endl;
-    assert(false);
-  }
-}
-
 string printBBName(const string & str){
   return str.substr(1);
 }
@@ -49,6 +32,26 @@ int calSize(const koopa_raw_type_t&type){
       assert(false && "unknown koopa type");
   }
 }
+
+
+void EmitArrayInitialization(const koopa_raw_value_t &value){
+  if(value->kind.tag == KOOPA_RVT_INTEGER){
+    cout << "  .word " << value->kind.data.integer.value << endl;
+  }else if(value->kind.tag == KOOPA_RVT_ZERO_INIT){
+    // do nothing here
+    cout << "  .zero " << calSize(value->ty) << endl;  
+  }else if(value->kind.tag == KOOPA_RVT_AGGREGATE){
+    auto &agg_init = value->kind.data.aggregate;
+    for(int i = 0; i < agg_init.elems.len; ++i){
+      koopa_raw_value_t elem = reinterpret_cast<koopa_raw_value_t>(agg_init.elems.buffer[i]);
+      EmitArrayInitialization(elem);
+    }
+  }else{
+    cerr << "Error: Unsupported array initialization kind tag: " << value->kind.tag << endl;
+    assert(false);
+  }
+}
+
 
 void LoadFromStack(const std::string &reg, int offset) {
   if (offset > 2047 || offset < -2048) {
@@ -128,17 +131,32 @@ void Visit(const koopa_raw_func_arg_ref_t &func_arg_ref, const koopa_raw_value_t
 
 void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t &value){
   if(is_global(get_elem_ptr.src)){
-    // Visit(get_elem_ptr.src);
     string tmp(get_elem_ptr.src->name);
-    tmp = tmp.substr(1);
-    cout << "  la t0, " << tmp << endl;
-  }else{
-    // calculate the location of an element ptr offset.
-    cout << "  li t0, " << stack_offset_map[get_elem_ptr.src] << endl;
-    cout << "  add t0, sp, t0" << endl; 
+    cout << "  la t0, " << tmp.substr(1) << endl;
+  } else {
+    int src_offset = stack_offset_map[get_elem_ptr.src];
+    // 判断 src 是否是之前的指针计算结果
+    if (get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || 
+        get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_PTR) {
+      // 如果 src 是指针，从栈里加载这个地址值
+      LoadFromStack("t0", src_offset);
+    } else {
+      // 如果 src 是 alloc 出来的数组，计算其在栈上的首地址
+      if (src_offset > 2047 || src_offset < -2048) {
+        cout << "  li t0, " << src_offset << endl;
+        cout << "  add t0, sp, t0" << endl;
+      } else {
+        cout << "  addi t0, sp, " << src_offset << endl;
+      }
+    }
   }
 
-  cout << "  li t1, " << get_elem_ptr.index->kind.data.integer.value << endl;
+  if(get_elem_ptr.index->kind.tag == KOOPA_RVT_INTEGER){
+    cout << "  li t1, " << get_elem_ptr.index->kind.data.integer.value << endl;
+  }else{
+    LoadFromStack("t1", stack_offset_map[get_elem_ptr.index]);
+  }
+
   cout << "  li t2, " << calSize(get_elem_ptr.src->ty->data.pointer.base->data.array.base) << endl;
   cout << "  mul t1, t1, t2" << endl;
   cout << "  add t0, t0, t1" << endl;
@@ -151,24 +169,37 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
 
 void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
   if(is_global(get_ptr.src)){
-    // Visit(get_elem_ptr.src);
     string tmp(get_ptr.src->name);
-    tmp = tmp.substr(1);
-    cout << "  la t0, " << tmp << endl;
-  }else{
-    // calculate the location of an element ptr offset.
-    cout << "  li t0, " << stack_offset_map[get_ptr.src] << endl;
-    cout << "  add t0, sp, t0" << endl; 
+    cout << "  la t0, " << tmp.substr(1) << endl;
+  } else {
+    int src_offset = stack_offset_map[get_ptr.src];
+    // 判断 src 是否是之前的指针计算结果
+    if (get_ptr.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || 
+        get_ptr.src->kind.tag == KOOPA_RVT_GET_PTR) {
+      // 如果 src 是指针，从栈里加载这个地址值
+      LoadFromStack("t0", src_offset);
+    } else {
+      // 如果 src 是 alloc 出来的数组，计算其在栈上的首地址
+      if (src_offset > 2047 || src_offset < -2048) {
+        cout << "  li t0, " << src_offset << endl;
+        cout << "  add t0, sp, t0" << endl;
+      } else {
+        cout << "  addi t0, sp, " << src_offset << endl;
+      }
+    }
   }
 
-  cout << "  li t1, " << get_ptr.index->kind.data.integer.value << endl;
+  if(get_ptr.index->kind.tag == KOOPA_RVT_INTEGER){
+    cout << "  li t1, " << get_ptr.index->kind.data.integer.value << endl;
+  }else{
+    LoadFromStack("t1", stack_offset_map[get_ptr.index]);
+  }
   cout << "  li t2, " << calSize(get_ptr.src->ty->data.pointer.base) << endl;
   cout << "  mul t1, t1, t2" << endl;
   cout << "  add t0, t0, t1" << endl;
   stack_offset_map[value] = offset*4;
-  offset++;
-  cerr << offset << endl;
   StoreToStack("t0", stack_offset_map[value]);
+  offset++;
   return;
 }
 
