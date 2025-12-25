@@ -135,13 +135,17 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
     cout << "  la t0, " << tmp.substr(1) << endl;
   } else {
     int src_offset = stack_offset_map[get_elem_ptr.src];
-    // 判断 src 是否是之前的指针计算结果
-    if (get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || 
-        get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_PTR) {
-      // 如果 src 是指针，从栈里加载这个地址值
+    auto src_kind = get_elem_ptr.src->kind.tag;
+
+    // 【核心修复】
+    if (src_kind == KOOPA_RVT_GET_ELEM_PTR || 
+        src_kind == KOOPA_RVT_GET_PTR || 
+        src_kind == KOOPA_RVT_LOAD ||
+        src_kind == KOOPA_RVT_FUNC_ARG_REF) {
+      // 如果 src 本身就是地址值（指针变量），从栈中加载该地址
       LoadFromStack("t0", src_offset);
     } else {
-      // 如果 src 是 alloc 出来的数组，计算其在栈上的首地址
+      // 如果 src 是 Alloc 出来的数组首地址
       if (src_offset > 2047 || src_offset < -2048) {
         cout << "  li t0, " << src_offset << endl;
         cout << "  add t0, sp, t0" << endl;
@@ -173,13 +177,17 @@ void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
     cout << "  la t0, " << tmp.substr(1) << endl;
   } else {
     int src_offset = stack_offset_map[get_ptr.src];
-    // 判断 src 是否是之前的指针计算结果
-    if (get_ptr.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || 
-        get_ptr.src->kind.tag == KOOPA_RVT_GET_PTR) {
-      // 如果 src 是指针，从栈里加载这个地址值
+    auto src_kind = get_ptr.src->kind.tag;
+
+    // 【核心修复】
+    if (src_kind == KOOPA_RVT_GET_ELEM_PTR || 
+        src_kind == KOOPA_RVT_GET_PTR || 
+        src_kind == KOOPA_RVT_LOAD ||
+        src_kind == KOOPA_RVT_FUNC_ARG_REF) {
+      // 如果 src 本身就是地址值（指针变量），从栈中加载该地址
       LoadFromStack("t0", src_offset);
     } else {
-      // 如果 src 是 alloc 出来的数组，计算其在栈上的首地址
+      // 如果 src 是 Alloc 出来的数组首地址
       if (src_offset > 2047 || src_offset < -2048) {
         cout << "  li t0, " << src_offset << endl;
         cout << "  add t0, sp, t0" << endl;
@@ -226,7 +234,7 @@ void Visit(const koopa_raw_jump_t &jump, const koopa_raw_value_t &value){
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
   // check if this is global allocate, if yes then we don't need to generate the initialization again.
   if(load.src->kind.tag == KOOPA_RVT_GET_PTR || load.src->kind.tag  == KOOPA_RVT_GET_ELEM_PTR){
-    Visit(load.src);
+    // Visit(load.src);
     LoadFromStack("t0", stack_offset_map[load.src]);
     cout << "  lw t0, 0(t0)" << endl;
     StoreToStack("t0", stack_offset_map[value]);
@@ -241,7 +249,7 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
     StoreToStack("t0", stack_offset_map[value]);
     return;
   }
-  Visit(load.src);
+  //Visit(load.src);
   LoadFromStack("t0", stack_offset_map[load.src]);
   StoreToStack("t0", stack_offset_map[value]);
 }
