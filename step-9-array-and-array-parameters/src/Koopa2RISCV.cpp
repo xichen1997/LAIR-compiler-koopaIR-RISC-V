@@ -12,8 +12,29 @@ unordered_map<koopa_raw_value_t, int> stack_offset_map; // string -> offset | in
 unordered_set<koopa_raw_value_t> visited;
 // unordered_map<koopa_raw_value_t, int> integer_map;
 
+void EmitArrayInitialization(const koopa_raw_value_t &value){
+  if(value->kind.tag == KOOPA_RVT_INTEGER){
+    cout << "  .word " << value->kind.data.integer.value << endl;
+  }else if(value->kind.tag == KOOPA_RVT_ZERO_INIT){
+    // do nothing here
+  }else if(value->kind.tag == KOOPA_RVT_AGGREGATE){
+    auto &agg_init = value->kind.data.aggregate;
+    for(int i = 0; i < agg_init.elems.len; ++i){
+      koopa_raw_value_t elem = reinterpret_cast<koopa_raw_value_t>(agg_init.elems.buffer[i]);
+      EmitArrayInitialization(elem);
+    }
+  }else{
+    cerr << "Error: Unsupported array initialization kind tag: " << value->kind.tag << endl;
+    assert(false);
+  }
+}
+
 string printBBName(const string & str){
   return str.substr(1);
+}
+
+inline bool is_global(const koopa_raw_value_t &v) {
+  return v->kind.tag == KOOPA_RVT_GLOBAL_ALLOC;
 }
 
 int calSize(const koopa_raw_type_t&type){
@@ -96,19 +117,8 @@ void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t
   string tmp(value->name);
   tmp = tmp.substr(1);
   cout << tmp << ":" << endl;
-  auto t = global_alloc.init->kind.tag;
-  if(t == KOOPA_RVT_INTEGER){
-    cout << "  .word " << global_alloc.init->kind.data.integer.value << endl;
-  }else if(t == KOOPA_RVT_AGGREGATE){
-    cout << "  .zero 4" << endl;
-  }else if(t == KOOPA_RVT_ZERO_INIT){
-    // calculate the array size.t == KOOPA_RVT_ZERO_INIT
-    cout << "  .zero 4" << endl;
-  }
-  else{
-    cerr << "Error: the global var allocation data is either KOOPA_RVT_INTEGER or KOOPA_RVT_ZERO_INIT" << endl;
-    assert(false);
-  }
+
+  EmitArrayInitialization(global_alloc.init);
   cout << endl;
 }
 
@@ -117,9 +127,16 @@ void Visit(const koopa_raw_func_arg_ref_t &func_arg_ref, const koopa_raw_value_t
 }
 
 void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t &value){
-  // calculate the location of an element ptr offset.
-  cout << "  li t0, " << stack_offset_map[get_elem_ptr.src] << endl;
-  cout << "  add t0, sp, t0" << endl; 
+  if(is_global(get_elem_ptr.src)){
+    // Visit(get_elem_ptr.src);
+    string tmp(get_elem_ptr.src->name);
+    tmp = tmp.substr(1);
+    cout << "  la t0, " << tmp << endl;
+  }else{
+    // calculate the location of an element ptr offset.
+    cout << "  li t0, " << stack_offset_map[get_elem_ptr.src] << endl;
+    cout << "  add t0, sp, t0" << endl; 
+  }
 
   cout << "  li t1, " << get_elem_ptr.index->kind.data.integer.value << endl;
   cout << "  li t2, " << calSize(get_elem_ptr.src->ty->data.pointer.base->data.array.base) << endl;
@@ -133,8 +150,16 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
 
 
 void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
-  cout << "  li t0, " << stack_offset_map[get_ptr.src] << endl;
-  cout << "  add t0, sp, t0" << endl; 
+  if(is_global(get_ptr.src)){
+    // Visit(get_elem_ptr.src);
+    string tmp(get_ptr.src->name);
+    tmp = tmp.substr(1);
+    cout << "  la t0, " << tmp << endl;
+  }else{
+    // calculate the location of an element ptr offset.
+    cout << "  li t0, " << stack_offset_map[get_ptr.src] << endl;
+    cout << "  add t0, sp, t0" << endl; 
+  }
 
   cout << "  li t1, " << get_ptr.index->kind.data.integer.value << endl;
   cout << "  li t2, " << calSize(get_ptr.src->ty->data.pointer.base) << endl;
