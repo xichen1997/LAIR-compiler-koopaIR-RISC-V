@@ -92,9 +92,19 @@ void Visit(const koopa_raw_integer_t &integer, const koopa_raw_value_t &value) {
   
 void Visit(const koopa_raw_return_t &ret) {
 
-  int sp_gap = total_variable_number;
-  sp_gap = sp_gap * 4;
-  sp_gap = (sp_gap + 15) / 16 * 16;
+  // int sp_gap = total_variable_number;
+  // sp_gap = sp_gap * 4;
+  // sp_gap = (sp_gap + 15) / 16 * 16;
+  auto Align16 = [](int x){ return (x + 15) / 16 * 16; };
+
+  // locals 这块我们用 “对齐后的 locals_bytes”，给你多留一个 word，避免你这种 28/32 的踩踏
+  int locals_bytes = Align16(total_variable_number * 4);
+
+  // ra 紧跟 locals 后面
+  int ra_off = locals_bytes;
+
+  // 整个 frame_size 再加 4（ra）后对齐
+  int frame_size = Align16(locals_bytes + 4);
 
   // if the ret.value exists, then check the value is a variable
   if (ret.value) {
@@ -106,24 +116,13 @@ void Visit(const koopa_raw_return_t &ret) {
     }
   }
 
-  int off = sp_gap - 4;
-  if (off >= -2048 && off <= 2047) {
-    cout << "  lw ra, " << off << "(sp)\n";
-  } else {
-    cout << "  li t0, " << off << "\n";
-    cout << "  add t0, sp, t0\n";
-    cout << "  lw ra, 0(t0)\n";
-  }
+  LoadFromStack("ra", ra_off);
 
-  // return to the previous stack frame
-  if(sp_gap > 2047){
-    cout << "  li t0, " << sp_gap << endl;
-    cout << "  add sp, sp, t0" << endl;
-  }else if(sp_gap <= 2047 && sp_gap > 0) {
-    cout << "  addi sp, sp, " << sp_gap << endl;
-  }
-  cout << "  ret" << endl;
-  cout << endl;
+  // sp += frame_size
+  if (frame_size > 2047) { cout<<"  li t0, "<<frame_size<<"\n  add sp, sp, t0\n"; }
+  else { cout<<"  addi sp, sp, "<<frame_size<<"\n"; }
+  
+  cout << "  ret\n\n";
 }
 
 void Visit(const koopa_raw_global_alloc_t &global_alloc, const koopa_raw_value_t &value){
@@ -452,9 +451,20 @@ void Visit(const koopa_raw_function_t &func) {
 
     cout << "  .globl " << funcName << endl;  // skip the '@' character
     cout << funcName << ":" << endl;
-    int sp_gap = total_variable_number;
-    sp_gap = sp_gap * 4;
-    sp_gap = (sp_gap + 15) / 16 * 16;
+    // int sp_gap = total_variable_number;
+    // sp_gap = sp_gap * 4;
+    // sp_gap = (sp_gap + 15) / 16 * 16;
+
+    auto Align16 = [](int x){ return (x + 15) / 16 * 16; };
+
+    // locals 这块我们用 “对齐后的 locals_bytes”，给你多留一个 word，避免你这种 28/32 的踩踏
+    int locals_bytes = Align16(total_variable_number * 4);
+
+    // ra 紧跟 locals 后面
+    int ra_off = locals_bytes;
+
+    // 整个 frame_size 再加 4（ra）后对齐
+    int frame_size = Align16(locals_bytes + 4);
 
 
     // need to load new stack_offset_map for the parameters.
@@ -465,25 +475,16 @@ void Visit(const koopa_raw_function_t &func) {
       if(i < 8) {
         stack_offset_map[reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i])] = -i - 1;
       }else{
-        stack_offset_map[reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i])]  = (i - 8)*4 + sp_gap;
+        stack_offset_map[reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i])]  = (i - 8)*4 + frame_size;
       }
     }
     
-    if(sp_gap > 2048){
-      cout << "  li t0, " << -sp_gap << endl;
-      cout << "  add sp, sp, t0" << endl;
-    }else if(sp_gap <= 2048 && sp_gap > 0){
-      cout << "  addi sp, sp, " << -sp_gap << endl;
-    }
+    // sp -= frame_size
+    if (frame_size > 2047) { cout<<"  li t0, "<<-frame_size<<"\n  add sp, sp, t0\n"; }
+    else { cout<<"  addi sp, sp, "<<-frame_size<<"\n"; }
 
-    int off = sp_gap - 4;
-    if (off >= -2048 && off <= 2047) {
-      cout << "  sw ra, " << off << "(sp)\n";
-    } else {
-      cout << "  li t0, " << off << "\n";
-      cout << "  add t0, sp, t0\n";
-      cout << "  sw ra, 0(t0)\n";
-    }
+    // sw ra, ra_off(sp)
+    StoreToStack("ra", ra_off);
 
     // This will do the koopaIR stuff. The parameters initialization is also included
     Visit(func->bbs);
