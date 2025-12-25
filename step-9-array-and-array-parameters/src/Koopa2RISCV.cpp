@@ -63,6 +63,19 @@ void LoadFromStack(const std::string &reg, int offset) {
   }
 }
 
+inline void LoadValue(const std::string &dst, const koopa_raw_value_t &v) {
+  if (v->kind.tag == KOOPA_RVT_INTEGER) {
+    cout << "  li " << dst << ", " << v->kind.data.integer.value << "\n";
+    return;
+  }
+  int off = stack_offset_map[v];
+  if (off < 0) {
+    cout << "  mv " << dst << ", a" << (-off - 1) << "\n";
+  } else {
+    LoadFromStack(dst, off);
+  }
+}
+
 void StoreToStack(const std::string &reg, int offset) {
   // in register
   if (offset > 2047 || offset < -2048) {
@@ -89,19 +102,17 @@ void Visit(const koopa_raw_return_t &ret) {
     if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
       cout << "  li a0, " << ret.value->kind.data.integer.value << endl;
     }else{
-      LoadFromStack("a0", stack_offset_map[ret.value]);
+      LoadValue("a0", ret.value);
     }
   }
 
   int off = sp_gap - 4;
-  if (is_function_called) {
-    if (off >= -2048 && off <= 2047) {
-      cout << "  lw ra, " << off << "(sp)\n";
-    } else {
-      cout << "  li t0, " << off << "\n";
-      cout << "  add t0, sp, t0\n";
-      cout << "  lw ra, 0(t0)\n";
-    }
+  if (off >= -2048 && off <= 2047) {
+    cout << "  lw ra, " << off << "(sp)\n";
+  } else {
+    cout << "  li t0, " << off << "\n";
+    cout << "  add t0, sp, t0\n";
+    cout << "  lw ra, 0(t0)\n";
   }
 
   // return to the previous stack frame
@@ -138,11 +149,11 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
     auto src_kind = get_elem_ptr.src->kind.tag;
 
     // 【核心修复】
-    if (src_kind == KOOPA_RVT_GET_ELEM_PTR || 
-        src_kind == KOOPA_RVT_GET_PTR || 
-        src_kind == KOOPA_RVT_LOAD ||
-        src_kind == KOOPA_RVT_FUNC_ARG_REF) {
-      // 如果 src 本身就是地址值（指针变量），从栈中加载该地址
+    if (src_kind == KOOPA_RVT_FUNC_ARG_REF) {
+      LoadValue("t0", get_elem_ptr.src); // 或 get_elem_ptr.src
+    } else if (src_kind == KOOPA_RVT_GET_ELEM_PTR ||
+               src_kind == KOOPA_RVT_GET_PTR || 
+               src_kind == KOOPA_RVT_LOAD) {
       LoadFromStack("t0", src_offset);
     } else {
       // 如果 src 是 Alloc 出来的数组首地址
@@ -180,11 +191,11 @@ void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
     auto src_kind = get_ptr.src->kind.tag;
 
     // 【核心修复】
-    if (src_kind == KOOPA_RVT_GET_ELEM_PTR || 
-        src_kind == KOOPA_RVT_GET_PTR || 
-        src_kind == KOOPA_RVT_LOAD ||
-        src_kind == KOOPA_RVT_FUNC_ARG_REF) {
-      // 如果 src 本身就是地址值（指针变量），从栈中加载该地址
+    if (src_kind == KOOPA_RVT_FUNC_ARG_REF) {
+      LoadValue("t0", get_ptr.src); // 或 get_elem_ptr.src
+    } else if (src_kind == KOOPA_RVT_GET_ELEM_PTR ||
+               src_kind == KOOPA_RVT_GET_PTR || 
+               src_kind == KOOPA_RVT_LOAD) {
       LoadFromStack("t0", src_offset);
     } else {
       // 如果 src 是 Alloc 出来的数组首地址
@@ -218,7 +229,8 @@ void Visit(const koopa_raw_branch_t &branch, const koopa_raw_value_t &value){
   if(branch.cond->kind.tag == KOOPA_RVT_INTEGER){
     cout << "  li t0, " << branch.cond->kind.data.integer.value << endl;
   }else{
-    LoadFromStack("t0", stack_offset_map[branch.cond]);
+    LoadValue("t0", branch.cond);
+    // LoadFromStack("t0", stack_offset_map[branch.cond]);
   }
   cout << "  bnez " << "t0" << ", " << printBBName(branch.true_bb->name) << endl;
   cout << "  j " << printBBName(branch.false_bb->name) << endl;
@@ -323,14 +335,16 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
       if (arg->kind.tag == KOOPA_RVT_INTEGER){
         cout << "  li a"<< i <<", " << arg->kind.data.integer.value << endl;
       }else{
-        LoadFromStack("a" + to_string(i), stack_offset_map[arg]);
+        // LoadFromStack("a" + to_string(i), stack_offset_map[arg]);
+        LoadValue("a" + to_string(i), arg);
       }
     }else{
       int location = (i - 8) * 4;
       if (arg->kind.tag == KOOPA_RVT_INTEGER){
         cout << "  li t0, " << arg->kind.data.integer.value << endl;
       }else{
-        LoadFromStack("t0", stack_offset_map[arg]);
+        LoadValue("t0", arg);
+        // LoadFromStack("t0", stack_offset_map[arg]);
       }
       StoreToStack("t0", location);
     }
@@ -463,14 +477,12 @@ void Visit(const koopa_raw_function_t &func) {
     }
 
     int off = sp_gap - 4;
-    if (is_function_called) {
-      if (off >= -2048 && off <= 2047) {
-        cout << "  sw ra, " << off << "(sp)\n";
-      } else {
-        cout << "  li t0, " << off << "\n";
-        cout << "  add t0, sp, t0\n";
-        cout << "  sw ra, 0(t0)\n";
-      }
+    if (off >= -2048 && off <= 2047) {
+      cout << "  sw ra, " << off << "(sp)\n";
+    } else {
+      cout << "  li t0, " << off << "\n";
+      cout << "  add t0, sp, t0\n";
+      cout << "  sw ra, 0(t0)\n";
     }
 
     // This will do the koopaIR stuff. The parameters initialization is also included
@@ -520,13 +532,15 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value) {
     if(binary.lhs->kind.tag == KOOPA_RVT_INTEGER){
       cout << "  li " << "t0, " <<  binary.lhs->kind.data.integer.value << endl;
     }else {
-      LoadFromStack("t0", stack_offset_map[binary.lhs]);
+      LoadValue("t0", binary.lhs);
+      // LoadFromStack("t0", stack_offset_map[binary.lhs]);
     }
 
     if(binary.rhs->kind.tag == KOOPA_RVT_INTEGER){
       cout << "  li " << "t1, " <<  binary.rhs->kind.data.integer.value << endl;
     }else {
-      LoadFromStack("t1", stack_offset_map[binary.rhs]);
+      LoadValue("t1", binary.rhs);
+      // LoadFromStack("t1", stack_offset_map[binary.rhs]);
     }
 
     switch (binary.op){
