@@ -1,7 +1,0 @@
-  .text
-  .globl main
-main:
-  addi sp, sp, 0
-  li a0, 7
-  addi sp, sp, 0
-  ret
