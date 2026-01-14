@@ -439,7 +439,7 @@ void Visit(const koopa_raw_function_t &func) {
     }
 
     total_variable_number = func_total_vars_map[funcName];
-    max_parameter_number = func_max_params_map[funcName];
+    max_parameter_number = func_max_params_map[funcName]; // check all of the callee functions to get the max parameter number
     is_function_called = func_is_called_map[funcName];
 
     // offset means the start position to arrange the temporary variables

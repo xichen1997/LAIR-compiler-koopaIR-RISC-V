@@ -445,12 +445,7 @@ void VarDef::GenerateIR(){
                 string tmp = *(init_val->varName);
                 cout << "global @" << current_variable_table_location->initialized_variables[*ident] << " = alloc i32, " << tmp << endl; 
                 current_variable_table_location->var_types[*ident] = Type::IntTy();
-            }else if(init_val->kind == InitVal::_Empty){
-                // zero init
-                cout << "global @" << current_variable_table_location->initialized_variables[*ident] << " = alloc i32, zeroinit" << endl; 
-                current_variable_table_location->var_types[*ident] = Type::IntTy();
-            } 
-            else{
+            }else{
                 AllocArray(ai, current_variable_table_location->initialized_variables[*ident]);
                 cout << ", ";
                 GetArrayInitialization(init_val->nested_init_val, ai, 0, 0);
